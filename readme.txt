@@ -1,4 +1,6 @@
 
+git-URL : https://github.com/groun519/PROJECT-STK
+
 1. 모델 학습
     - run_train.bat 실행
 
