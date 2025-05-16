@@ -1,0 +1,6 @@
+
+# config.py
+
+SYMBOL = "TSLA"
+START_DATE = "2025-05-01"
+END_DATE = "2025-05-15"
