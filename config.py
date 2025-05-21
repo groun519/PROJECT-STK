@@ -6,7 +6,7 @@ SYMBOL_LIST = [
     "AAPL", "MSFT", "NVDA", "AMZN", "GOOGL", "GOOG", "META", "TSLA", "ADBE", "AVGO",
     "COST", "PEP", "CSCO", "INTC", "CMCSA", "NFLX", "AMD", "QCOM", "TXN", "AMGN",
     "INTU", "SBUX", "ISRG", "ADI", "MDLZ", "BKNG", "GILD", "MU", "LRCX", "VRTX",
-    "REGN", "FISV", "KHC", "ADP", "ATVI", "MAR", "LULU", "EA", "BIIB", "MNST",
+    "REGN", "KHC", "ADP", "MAR", "LULU", "EA", "BIIB", "MNST",
     "ROST", "CDNS", "CTAS", "DLTR", "EXC", "ILMN", "MCHP", "NXPI", "ORLY", "PAYX",
     "PYPL", "SIRI", "SNPS", "TMUS", "VRSK", "WBA", "XEL", "ZS", "ABNB", "ANSS",
     "ASML", "AZN", "BKR", "CHTR", "CSGP", "DDOG", "DXCM", "FAST", "FTNT", "GEHC",
