@@ -1,94 +1,76 @@
-from stable_baselines3 import PPO
-from env_trading_mtf import TradingEnvMTF
-from data_utils import load_multitimeframe_data
-from config import SYMBOL, START_DATE, END_DATE
-import time
-from pathlib import Path
-from datetime import datetime
-import sys
-import re
+import os
+import torch
+import torch.nn as nn
+import torch.optim as optim
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import classification_report
+from data_utils import build_lstm_dataset
+from model_transformer import LSTMTransformer
+from config import SYMBOL_LIST, MARKET_MODEL_PATH
 
-def normalize_model_name(name: str) -> str:
-    return re.sub(r'[^A-Z0-9_]', '_', name.strip().upper())
+import numpy as np
 
-def list_existing_models(models_root: Path):
-    return [d for d in models_root.iterdir() if d.is_dir() and (d / "model.zip").exists()]
+def train_market_model(epochs=10, batch_size=64):
+    X_all, y_all = [], []
+    expected_dim = None
 
-def select_existing_model(existing_models):
-    print("\n========== 기존 모델 목록 ==========")
-    for idx, model_dir in enumerate(existing_models, 1):
-        print(f"{idx}. {model_dir.name}")
-    selected = input("불러올 모델 번호 선택: ").strip()
-    if not selected.isdigit() or int(selected) < 1 or int(selected) > len(existing_models):
-        print("잘못된 입력입니다.")
-        sys.exit()
-    return existing_models[int(selected) - 1]
+    for symbol in SYMBOL_LIST:
+        print(f"📊 [{symbol}] 학습 데이터셋 준비 중...")
+        X, y = build_lstm_dataset(symbol)
+        if X is not None:
+            if expected_dim is None:
+                expected_dim = X.shape[2]
+            if X.shape[2] != expected_dim:
+                print(f"⚠️ {symbol}: feature 차원 불일치 (expected {expected_dim}, got {X.shape[2]}) → 제외")
+                continue
+            X_all.append(X)
+            y_all.append(y)
 
-def create_new_model_dir(models_root: Path) -> Path:
-    raw_name = input("모델명을 입력하세요 (예: macd_rsi_v1): ")
-    base_name = normalize_model_name(raw_name)
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    version = f"model_{base_name}_{timestamp}"
-    model_dir = models_root / version
-    model_dir.mkdir(parents=True, exist_ok=True)
-    return model_dir
+    if not X_all:
+        print("❌ 학습 가능한 종목 데이터 없음")
+        return
 
-def main():
-    MODELS_ROOT = Path("models")
-    existing_models = list_existing_models(MODELS_ROOT)
+    X = np.concatenate(X_all, axis=0)
+    y = np.concatenate(y_all, axis=0)
+    print("📈 전체 라벨 분포:", np.unique(y, return_counts=True))
 
-    print("========== 실행 모드 선택 ==========")
-    if existing_models:
-        print("1. 기존 모델 선택")
-        print("2. 새 모델 생성")
-        print("3. 종료")
-        choice = input("선택 (1/2/3): ").strip()
-        if choice == "3":
-            print("종료합니다.")
-            sys.exit()
-        elif choice == "1":
-            model_dir = select_existing_model(existing_models)
-        elif choice == "2":
-            model_dir = create_new_model_dir(MODELS_ROOT)
-        else:
-            print("잘못된 입력입니다.")
-            sys.exit()
-    else:
-        print("※ 기존 모델이 없습니다.")
-        print("1. 새 모델 생성")
-        print("2. 종료")
-        choice = input("선택 (1/2): ").strip()
-        if choice == "2":
-            print("종료합니다.")
-            sys.exit()
-        elif choice == "1":
-            model_dir = create_new_model_dir(MODELS_ROOT)
-        else:
-            print("잘못된 입력입니다.")
-            sys.exit()
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, stratify=y, random_state=42)
 
-    model_path = model_dir / "model.zip"
-    log_path = model_dir / "live_log.csv"
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model = LSTMTransformer(input_size=X.shape[2]).to(device)
 
-    # 데이터 및 환경 생성
-    data = load_multitimeframe_data(SYMBOL, start=START_DATE, end=END_DATE)
-    env = TradingEnvMTF(data, log_path=str(log_path))
+    criterion = nn.CrossEntropyLoss()
+    optimizer = optim.Adam(model.parameters(), lr=1e-3)
 
-    # 모델 로드 or 생성
-    if model_path.exists():
-        print(f"[Model found] Loading model from {model_path}")
-        model = PPO.load(str(model_path), env=env)
-    else:
-        print("[No model found] Creating new model...")
-        model = PPO("MlpPolicy", env, verbose=1, tensorboard_log=str(model_dir / "logs"))
+    train_ds = torch.utils.data.TensorDataset(
+        torch.tensor(X_train, dtype=torch.float32),
+        torch.tensor(y_train, dtype=torch.long)
+    )
+    loader = torch.utils.data.DataLoader(train_ds, batch_size=batch_size, shuffle=True)
 
-    # 반복 학습
-    while True:
-        print("[Training step started]")
-        model.learn(total_timesteps=10000, reset_num_timesteps=False)
-        model.save(str(model_path))
-        print("[Model saved to]", model_path)
-        time.sleep(3)
+    print(f"🚀 통합 학습 시작 (Epochs: {epochs})")
+    for epoch in range(epochs):
+        model.train()
+        total_loss = 0
+        for xb, yb in loader:
+            xb, yb = xb.to(device), yb.to(device)
+            optimizer.zero_grad()
+            out = model(xb)
+            loss = criterion(out, yb)
+            loss.backward()
+            optimizer.step()
+            total_loss += loss.item()
+        print(f"[{epoch+1}/{epochs}] Loss: {total_loss:.4f}")
+
+    os.makedirs(os.path.dirname(MARKET_MODEL_PATH), exist_ok=True)
+    torch.save(model.state_dict(), MARKET_MODEL_PATH)
+    print(f"✅ 통합 모델 저장 완료: {MARKET_MODEL_PATH}")
+
+    # 평가
+    model.eval()
+    with torch.no_grad():
+        pred = model(torch.tensor(X_test, dtype=torch.float32).to(device)).argmax(dim=1).cpu().numpy()
+        print(classification_report(y_test, pred, digits=4))
 
 if __name__ == "__main__":
-    main()
+    train_market_model()
