@@ -1,5 +1,6 @@
 # 예측 기준 분봉
-TARGET_INTERVAL = "30m"
+TARGET_INTERVAL = "5m"
+TARGET_SYMBOL = "NVDA"
 
 # 학습 대상 종목 리스트
 SYMBOL_LIST = [

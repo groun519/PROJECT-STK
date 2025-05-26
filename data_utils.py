@@ -6,23 +6,18 @@ import numpy as np
 from sklearn.preprocessing import MinMaxScaler
 from config import INDEX_SYMBOL, TARGET_INTERVAL, START_DATE, END_DATE
 
-# ✅ 캐시 디렉토리 생성
 CACHE_DIR = "cache"
 os.makedirs(CACHE_DIR, exist_ok=True)
 
 def compute_indicators(df):
     try:
-        # ✅ 컬럼 이름 정리: 다중 인덱스 → 단일, 소문자화
         if isinstance(df.columns, pd.MultiIndex):
             df.columns = [col[0].lower() if isinstance(col, tuple) else col.lower() for col in df.columns]
         else:
             df.columns = [col.lower() for col in df.columns]
         df.columns = [col.replace("_tsla", "") for col in df.columns]
-
-        # ✅ 열 타입 강제 변환
         df = df.apply(pd.to_numeric, errors="coerce")
-        
-        # ✅ 필수 컬럼 확인
+
         for col in ["open", "high", "low", "close", "volume"]:
             if col not in df.columns:
                 raise KeyError(f"'{col}' column not found in df")
@@ -43,36 +38,53 @@ def compute_indicators(df):
         print(f"[지표 계산 실패] {e}")
         return None
 
-def load_from_cache_or_download(symbol, interval, start, end):
-    fname = f"{symbol}_{interval}_{start}_{end}.csv".replace(":", "-")
+def load_cached_data(symbol, interval):
+    fname = f"{symbol}_{interval}.csv"
     path = os.path.join(CACHE_DIR, fname)
-
     if os.path.exists(path):
-        return pd.read_csv(path, index_col=0)
+        try:
+            df = pd.read_csv(path, index_col=0, parse_dates=True)
+            return df
+        except:
+            return pd.DataFrame()
+    return pd.DataFrame()
 
-    df = yf.download(symbol, start=start, end=end, interval=interval, progress=False, group_by="column")
-    if not df.empty:
-        df.to_csv(path)
-    return df
+def save_cached_data(symbol, interval, df):
+    fname = f"{symbol}_{interval}.csv"
+    path = os.path.join(CACHE_DIR, fname)
+    df.to_csv(path)
 
+def update_cache(symbol, interval, start, end):
+    cached_df = load_cached_data(symbol, interval)
+    latest_date = cached_df.index[-1] if not cached_df.empty else pd.to_datetime(start)
+
+    try:
+        df_new = yf.download(symbol, start=latest_date, end=end, interval=interval, progress=False, group_by="column")
+        if df_new.empty:
+            return cached_df
+        df_combined = pd.concat([cached_df, df_new])
+        df_combined = df_combined[~df_combined.index.duplicated(keep="last")]
+        save_cached_data(symbol, interval, df_combined)
+        return df_combined
+    except Exception as e:
+        print(f"❗ 다운로드 실패 ({symbol}, {interval}): {e}")
+        return cached_df
 
 def load_multitimeframe_data(symbol, index_symbol=INDEX_SYMBOL, start=START_DATE, end=END_DATE):
     intervals = ["2m", "5m", "15m", "30m", "60m", "1d"]
     data = {"stock": {}, "index": {}}
     for interval in intervals:
-        try:
-            df_stock = load_from_cache_or_download(symbol, interval, start, end)
-            df_index = load_from_cache_or_download(index_symbol, interval, start, end)
+        stock_df = update_cache(symbol, interval, start, end)
+        index_df = update_cache(index_symbol, interval, start, end)
 
-
-            if not df_stock.empty:
-                df_stock = compute_indicators(df_stock)
-                data["stock"][interval] = df_stock
-            if not df_index.empty:
-                df_index = compute_indicators(df_index)
-                data["index"][interval] = df_index
-        except Exception as e:
-            print(f"❗ {interval} 다운로드 실패: {e}")
+        if not stock_df.empty:
+            ind = compute_indicators(stock_df)
+            if ind is not None:
+                data["stock"][interval] = ind
+        if not index_df.empty:
+            ind = compute_indicators(index_df)
+            if ind is not None:
+                data["index"][interval] = ind
     return data
 
 def build_lstm_dataset(symbol, window_size=30, target_shift=1, target_column="close"):
@@ -97,7 +109,7 @@ def build_lstm_dataset(symbol, window_size=30, target_shift=1, target_column="cl
         for interval in intervals:
             for key in ["stock", "index"]:
                 df = mtf_data[key].get(interval)
-                if df is None:
+                if df is None or len(df) < i:
                     continue
                 slice = df.iloc[i - window_size:i]
                 if len(slice) < window_size:
@@ -110,20 +122,18 @@ def build_lstm_dataset(symbol, window_size=30, target_shift=1, target_column="cl
             x = np.concatenate(stack, axis=1)
             features.append(x)
 
-    X = np.stack(features, axis=0)
+    if not features:
+        return None, None
 
-    # ✅ NaN/inf 방지: 유효하지 않은 값 제거
+    X = np.stack(features, axis=0)
     X = np.nan_to_num(X, nan=0.0, posinf=1e10, neginf=-1e10)
 
-
-    # ✅ MinMax 정규화 적용
     num_samples, seq_len, input_dim = X.shape
     scaler = MinMaxScaler()
     X = X.reshape(-1, input_dim)
     X = scaler.fit_transform(X)
     X = X.reshape(num_samples, seq_len, input_dim)
 
-    # ✅ 정답 벡터 생성
     y = []
     close_series = target_df[target_column].values
     for i in range(window_size, len(close_series) - target_shift):
@@ -131,11 +141,11 @@ def build_lstm_dataset(symbol, window_size=30, target_shift=1, target_column="cl
         current = close_series[i]
         change = (future - current) / current
         if change > 0.01:
-            y.append(2)  # 상승
+            y.append(2)
         elif change < -0.01:
-            y.append(0)  # 하락
+            y.append(0)
         else:
-            y.append(1)  # 관망
+            y.append(1)
 
     y = np.array(y)
     print("정답 라벨 분포:", np.unique(y, return_counts=True))
