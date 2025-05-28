@@ -9,6 +9,18 @@ from config import INDEX_SYMBOL, TARGET_INTERVAL, START_DATE, END_DATE
 CACHE_DIR = "cache"
 os.makedirs(CACHE_DIR, exist_ok=True)
 
+# ✅ 분봉별 라벨 기준 설정
+LABEL_THRESHOLDS = {
+    "2m": 0.003,
+    "5m": 0.005,
+    "15m": 0.007,
+    "30m": 0.01,
+    "60m": 0.012,
+    "1d": 0.015,
+}
+def get_threshold(interval):
+    return LABEL_THRESHOLDS.get(interval, 0.01)
+
 def compute_indicators(df):
     try:
         if isinstance(df.columns, pd.MultiIndex):
@@ -126,18 +138,15 @@ def build_lstm_dataset(symbol, window_size=30, target_shift=1, target_column="cl
         print(f"❌ {TARGET_INTERVAL} 분봉 데이터가 존재하지 않습니다.")
         return None, None
 
+    threshold = get_threshold(TARGET_INTERVAL)
     intervals = ["2m", "5m", "15m", "30m", "60m", "1d"]
     features = []
-    labels = []
-
     target_df = mtf_data["stock"][TARGET_INTERVAL]
     if target_df is None:
         print(f"❌ {symbol}의 {TARGET_INTERVAL} 데이터 없음 또는 지표 계산 실패")
         return None, None
 
     ref_shape = None
-    close_series = target_df[target_column].values
-
     for i in range(window_size, len(target_df) - target_shift):
         stack = []
         for interval in intervals:
@@ -160,21 +169,10 @@ def build_lstm_dataset(symbol, window_size=30, target_shift=1, target_column="cl
         if ref_shape is None:
             ref_shape = x.shape[1]
         if x.shape[1] != ref_shape:
-            continue
-
-        future = close_series[i + target_shift]
-        current = close_series[i]
-        change = (future - current) / current
-        if np.isnan(change):
+            print(f"⚠️ {symbol} {i}: shape 불일치 → 건너뜀")
             continue
 
         features.append(x)
-        if change > 0.01:
-            labels.append(2)
-        elif change < -0.01:
-            labels.append(0)
-        else:
-            labels.append(1)
 
     if not features:
         return None, None
@@ -188,7 +186,20 @@ def build_lstm_dataset(symbol, window_size=30, target_shift=1, target_column="cl
     X = scaler.fit_transform(X)
     X = X.reshape(num_samples, seq_len, input_dim)
 
-    y = np.array(labels)
+    y = []
+    close_series = target_df[target_column].values
+    for i in range(window_size, len(close_series) - target_shift):
+        future = close_series[i + target_shift]
+        current = close_series[i]
+        change = (future - current) / current
+        if change > threshold:
+            y.append(2)
+        elif change < -threshold:
+            y.append(0)
+        else:
+            y.append(1)
+
+    y = np.array(y)
     print("정답 라벨 분포:", np.unique(y, return_counts=True))
     return X, y
 
