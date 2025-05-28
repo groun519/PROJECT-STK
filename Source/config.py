@@ -1,19 +1,21 @@
 # 예측 기준 분봉
-TARGET_INTERVAL = "5m"
-TARGET_SYMBOL = "NVDA"
+TARGET_INTERVAL = "30m"
 
 # 나스닥 시장 지수
 INDEX_SYMBOL = "^IXIC"
 
 # 데이터 수집 기간
-START_DATE = "2025-04-01"
-END_DATE = "2025-05-01"
+START_DATE = "2025-05-20"
+END_DATE = "2025-05-25"
 
 MARKET_MODEL_PATH = "models/market/lstm_market.pt"
 
 # 학습 대상 종목 리스트
 SYMBOL_LIST = [
-    "AAPL", "MSFT", "NVDA", "AMZN", "GOOGL", "GOOG", "META", "TSLA", "BRK.B", "UNH",
+    "AAPL", "MSFT", "NVDA"] #, "AMZN", "GOOGL", "GOOG", "META", "TSLA", "BRK.B", "UNH"]
+    
+'''
+    ,
     "JNJ",  "V",    "XOM",  "JPM",  "MA",    "PG",   "LLY",  "HD",   "CVX",  "ABBV",
     "PEP",  "KO",   "MRK",  "AVGO", "BAC",   "COST", "WMT",  "DIS",  "ADBE", "CSCO",
     "PFE",  "CMCSA","TMO",  "ABT",  "ACN",   "DHR",  "MCD",  "INTC", "CRM",  "LIN",
@@ -49,3 +51,4 @@ SYMBOL_LIST = [
     "CE",   "ALB",  "CF",   "MOS",  "FMC",   "NUE",  "STLD", "X",    "AA",   "ATI",
     "CMC",  "RS",   "SCHN", "SCCO", "TECK",  "VALE", "WPM",  "AG",   "AU",   "GOLD"
 ]
+'''

@@ -11,14 +11,12 @@ os.makedirs(CACHE_DIR, exist_ok=True)
 
 def compute_indicators(df):
     try:
-        # ✅ 컬럼 이름 정규화 (MultiIndex 대응 + 전처리)
         if isinstance(df.columns, pd.MultiIndex):
             df.columns = ['_'.join(filter(None, map(str, col))).lower() for col in df.columns]
         else:
             df.columns = [str(col).lower() for col in df.columns]
         df = df.apply(pd.to_numeric, errors="coerce")
 
-        # ✅ 필수 컬럼 대응: 접미사 제거 버전 추출 시도
         def find_col(possible_names):
             for name in df.columns:
                 for key in possible_names:
@@ -35,7 +33,6 @@ def compute_indicators(df):
         if not all([open_col, high_col, low_col, close_col, volume_col]):
             raise KeyError("필수 컬럼 누락: open/high/low/close/volume")
 
-        # ✅ 기술 지표 계산
         close = df[close_col]
         df["rsi"] = ta.momentum.RSIIndicator(close).rsi()
         macd = ta.trend.MACD(close)
@@ -46,7 +43,6 @@ def compute_indicators(df):
         df["sma5"] = close.rolling(5).mean()
         df["volume_change"] = df[volume_col].pct_change(fill_method=None)
 
-        # ✅ 컬럼 순서 고정 및 누락 대응
         df["open"] = df[open_col]
         df["high"] = df[high_col]
         df["low"] = df[low_col]
@@ -61,21 +57,20 @@ def compute_indicators(df):
             if col not in df.columns:
                 df[col] = np.nan
 
-        return df[expected_cols].dropna()
-
+        return df[expected_cols]
     except Exception as e:
         print(f"[지표 계산 실패] {e}")
         return None
 
-
 def load_cached_data(symbol, interval):
-    fname = f"{symbol}_{interval}.csv"
+    fname = f"{symbol.replace('.', '-')}_{interval}.csv"
     path = os.path.join(CACHE_DIR, fname)
     if os.path.exists(path):
         try:
             df = pd.read_csv(path, index_col=0)
             df.index = pd.to_datetime(df.index, errors="coerce")
-            df.index = df.index.tz_localize("UTC", ambiguous="NaT", nonexistent="NaT")
+            if not df.index.tz:
+                df.index = df.index.tz_localize("UTC", ambiguous="NaT", nonexistent="NaT")
             return df
         except Exception as e:
             print(f"[캐시 로딩 실패] {symbol} {interval}: {e}")
@@ -83,11 +78,12 @@ def load_cached_data(symbol, interval):
     return pd.DataFrame()
 
 def save_cached_data(symbol, interval, df):
-    fname = f"{symbol}_{interval}.csv"
+    fname = f"{symbol.replace('.', '-')}_{interval}.csv"
     path = os.path.join(CACHE_DIR, fname)
     df.to_csv(path)
 
 def update_cache(symbol, interval, start, end):
+    symbol = symbol.replace(".", "-")
     cached_df = load_cached_data(symbol, interval)
     latest_date = cached_df.index[-1] if not cached_df.empty else pd.to_datetime(start)
 
@@ -132,10 +128,15 @@ def build_lstm_dataset(symbol, window_size=30, target_shift=1, target_column="cl
 
     intervals = ["2m", "5m", "15m", "30m", "60m", "1d"]
     features = []
+    labels = []
+
     target_df = mtf_data["stock"][TARGET_INTERVAL]
     if target_df is None:
         print(f"❌ {symbol}의 {TARGET_INTERVAL} 데이터 없음 또는 지표 계산 실패")
         return None, None
+
+    ref_shape = None
+    close_series = target_df[target_column].values
 
     for i in range(window_size, len(target_df) - target_shift):
         stack = []
@@ -151,9 +152,29 @@ def build_lstm_dataset(symbol, window_size=30, target_shift=1, target_column="cl
                 else:
                     slice = slice.values
                 stack.append(slice)
-        if stack:
-            x = np.concatenate(stack, axis=1)
-            features.append(x)
+
+        if not stack:
+            continue
+
+        x = np.concatenate(stack, axis=1)
+        if ref_shape is None:
+            ref_shape = x.shape[1]
+        if x.shape[1] != ref_shape:
+            continue
+
+        future = close_series[i + target_shift]
+        current = close_series[i]
+        change = (future - current) / current
+        if np.isnan(change):
+            continue
+
+        features.append(x)
+        if change > 0.01:
+            labels.append(2)
+        elif change < -0.01:
+            labels.append(0)
+        else:
+            labels.append(1)
 
     if not features:
         return None, None
@@ -167,20 +188,7 @@ def build_lstm_dataset(symbol, window_size=30, target_shift=1, target_column="cl
     X = scaler.fit_transform(X)
     X = X.reshape(num_samples, seq_len, input_dim)
 
-    y = []
-    close_series = target_df[target_column].values
-    for i in range(window_size, len(close_series) - target_shift):
-        future = close_series[i + target_shift]
-        current = close_series[i]
-        change = (future - current) / current
-        if change > 0.01:
-            y.append(2)
-        elif change < -0.01:
-            y.append(0)
-        else:
-            y.append(1)
-
-    y = np.array(y)
+    y = np.array(labels)
     print("정답 라벨 분포:", np.unique(y, return_counts=True))
     return X, y
 
