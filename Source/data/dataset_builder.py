@@ -1,40 +1,28 @@
-# dataset_builder.py
-
 import numpy as np
 from sklearn.preprocessing import MinMaxScaler
-from data.data_fetcher import load_multitimeframe_data
-from data.indicators import compute_indicators, get_threshold
+from data_fetcher import load_multitimeframe_data
+from Source.data._data_config import (
+    SYMBOL_LIST, TARGET_INTERVAL, TARGET_COLUMN,
+    INTERVAL_MINUTES, WINDOW_MINUTES,
+    LABEL_THRESHOLDS, REQUIRED_LENGTH
+)
 
-# 각 타임프레임의 분 단위 변환값
-INTERVAL_MINUTES = {
-    "2m": 2,
-    "5m": 5,
-    "15m": 15,
-    "30m": 30,
-    "60m": 60,
-    "1d": 1440,
-}
+def get_threshold(interval):
+    return LABEL_THRESHOLDS.get(interval, 0.01)
 
-# 기준 시간 윈도우 (예: 과거 60분 = 다양한 분봉으로 구성)
-WINDOW_MINUTES = 60
-
-# 각 타임프레임에서 몇 개의 캔들이 필요한지 계산
-REQUIRED_LENGTH = {k: WINDOW_MINUTES // v for k, v in INTERVAL_MINUTES.items()}
-
-def build_lstm_dataset(symbol, interval, start, end, target_column="close"):
-    mtf_data = load_multitimeframe_data(symbol, start=start, end=end)
+def build_lstm_dataset(symbol):
+    mtf_data = load_multitimeframe_data(symbol)
 
     if not mtf_data["stock"] or not mtf_data["index"]:
         print("❌ 데이터 로딩 실패")
         return None, None
 
-    if interval not in mtf_data["stock"]:
-        print(f"❌ {interval} 분봉 데이터가 존재하지 않습니다.")
+    if TARGET_INTERVAL not in mtf_data["stock"]:
+        print(f"❌ {TARGET_INTERVAL} 분봉 데이터가 존재하지 않습니다.")
         return None, None
 
-    target_df = mtf_data["stock"][interval]
-    target_df = compute_indicators(target_df)
-    threshold = get_threshold(interval)
+    target_df = mtf_data["stock"][TARGET_INTERVAL]
+    threshold = get_threshold(TARGET_INTERVAL)
 
     features, labels = [], []
     ref_shape = None
@@ -43,13 +31,10 @@ def build_lstm_dataset(symbol, interval, start, end, target_column="close"):
         anchor_time = target_df.index[i]
         stack = []
 
-        for tf in INTERVAL_MINUTES.keys():
-            win_len = REQUIRED_LENGTH[tf]
+        for interval in INTERVAL_MINUTES.keys():
+            win_len = REQUIRED_LENGTH[interval]
             for key in ["stock", "index"]:
-                df_raw = mtf_data[key].get(tf)
-                if df_raw is None:
-                    continue
-                df = compute_indicators(df_raw)
+                df = mtf_data[key].get(interval)
                 if df is None or anchor_time not in df.index:
                     continue
                 df_slice = df[df.index <= anchor_time].tail(win_len)
@@ -68,18 +53,18 @@ def build_lstm_dataset(symbol, interval, start, end, target_column="close"):
             ref_shape = x.shape[1]
         if x.shape[1] != ref_shape:
             continue
+
         features.append(x)
 
-        # 라벨 계산
-        future = target_df[target_column].iloc[i + 1]
-        current = target_df[target_column].iloc[i]
+        # 라벨링: 이진 분류 (상승 vs 하락/보합)
+        future = target_df[TARGET_COLUMN].iloc[i + 1]
+        current = target_df[TARGET_COLUMN].iloc[i]
         change = (future - current) / current
-        if change > threshold:
-            labels.append(2)  # 상승
-        elif change < -threshold:
-            labels.append(0)  # 하락
-        else:
-            labels.append(1)  # 관망
+        label = 1 if change > threshold else 0
+        labels.append(label)
+
+        # 🎯 주석: 향후 수익률 회귀 예측 라벨링도 고려 가능
+        # labels.append(change)
 
     if not features:
         return None, None
@@ -94,25 +79,21 @@ def build_lstm_dataset(symbol, interval, start, end, target_column="close"):
     X = scaler.fit_transform(X)
     X = X.reshape(-1, WINDOW_MINUTES, ref_shape)
 
-    print("정답 라벨 분포:", np.unique(y, return_counts=True))
     return X, y
 
-def build_generic_dataset(interval, start, end, target_column="close", symbol_list=None):
-    if symbol_list is None:
-        from config import SYMBOL_LIST
-    else:
-        SYMBOL_LIST = symbol_list
+def build_generic_dataset(interval: str):
+    global TARGET_INTERVAL
+    TARGET_INTERVAL = interval
 
     X_all, y_all = [], []
     expected_dim = None
 
     for symbol in SYMBOL_LIST:
         print(f"📡 [{symbol} / {interval}] 데이터셋 생성 중...")
-        X, y = build_lstm_dataset(symbol, interval, start, end, target_column)
+        X, y = build_lstm_dataset(symbol)
 
         if X is None or y is None:
             continue
-
         if expected_dim is None:
             expected_dim = X.shape[2]
         if X.shape[2] != expected_dim:
@@ -128,5 +109,10 @@ def build_generic_dataset(interval, start, end, target_column="close", symbol_li
 
     X = np.concatenate(X_all, axis=0)
     y = np.concatenate(y_all, axis=0)
-    print(f"✅ {interval} 기준 총 샘플 수: {X.shape[0]}, 라벨 분포: {np.unique(y, return_counts=True)}")
+    print(f"✅ {interval} 기준 총 샘플 수: {X.shape[0]}")
     return X, y
+
+def show_label_distribution(y):
+    unique, counts = np.unique(y, return_counts=True)
+    for u, c in zip(unique, counts):
+        print(f"  🟢 라벨 {u}: {c}개 ({(c / len(y)) * 100:.2f}%)")

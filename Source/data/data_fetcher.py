@@ -1,5 +1,3 @@
-# data_fetcher.py
-
 import os
 import pandas as pd
 import yfinance as yf
