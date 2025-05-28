@@ -36,7 +36,8 @@ for interval in INTERVALS:
     print(f"\n🚀 [{interval}] 분봉 기준 범용 모델 학습 시작")
     run_start = time.time()
 
-    X, y = build_generic_dataset(interval=interval, window_size=30, target_shift=1)
+    # ✅ 수정된 호출부: 불필요한 인자 제거
+    X, y = build_generic_dataset(interval=interval)
     if X is None or y is None:
         print(f"❌ [{interval}] 학습 데이터 생성 실패 → 건너뜀")
         continue
@@ -44,19 +45,14 @@ for interval in INTERVALS:
     label_counts = np.unique(y, return_counts=True)
     print(f"📊 라벨 분포: {dict(zip(*label_counts))}")
 
-    # TensorBoard 설정
     writer = SummaryWriter(log_dir=f"runs/{interval}")
     writer.add_text("Hyperparameters", f"Interval={interval}, BatchSize={BATCH_SIZE}, Epochs={EPOCHS}, LR={LEARNING_RATE}")
     for label, count in zip(*label_counts):
         writer.add_scalar("LabelDistribution/Class_" + str(label), count, 0)
 
-    # 🔄 데이터 분리
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, stratify=y, random_state=42)
-
-    # ✅ 장치 설정
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    # ✅ 모델 구성
     input_dim = X.shape[2]
     model = LSTMTransformer(input_size=input_dim).to(device)
     criterion = nn.CrossEntropyLoss()
@@ -66,7 +62,6 @@ for interval in INTERVALS:
                              torch.tensor(y_train, dtype=torch.long))
     train_loader = DataLoader(train_ds, batch_size=BATCH_SIZE, shuffle=True)
 
-    # ✅ 학습 루프
     for epoch in range(EPOCHS):
         epoch_start = time.time()
         model.train()
@@ -90,13 +85,11 @@ for interval in INTERVALS:
 
         print(f"[{epoch+1}/{EPOCHS}] Loss: {total_loss:.4f} | Train Acc: {acc*100:.2f}%")
 
-    # ✅ 모델 저장
     os.makedirs("models", exist_ok=True)
     model_path = f"models/direction_model_{interval}.pt"
     torch.save(model.state_dict(), model_path)
     print(f"\n✅ 저장 완료: {model_path}")
 
-    # ✅ 검증
     model.eval()
     with torch.no_grad():
         logits = model(torch.tensor(X_test, dtype=torch.float32).to(device))
@@ -107,7 +100,6 @@ for interval in INTERVALS:
     print("\n📊 [검증 결과]")
     print(classification_report(y_test, preds, digits=4))
 
-    # ✅ 혼동 행렬 이미지 저장 및 TensorBoard에 기록
     cm_path = f"runs/{interval}/confusion_matrix.png"
     saved_cm_path = plot_confusion_matrix(y_test, preds, class_names=["Down", "Neutral", "Up"], save_path=cm_path)
     writer.add_image("Val/ConfusionMatrix", 

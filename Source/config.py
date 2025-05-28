@@ -5,8 +5,9 @@ TARGET_INTERVAL = "30m"
 INDEX_SYMBOL = "^IXIC"
 
 # 데이터 수집 기간
-START_DATE = "2025-05-20"
-END_DATE = "2025-05-25"
+START_DATE = "2025-04-20"
+END_DATE = "2025-05-21"
+INTERVALS = ["2m", "5m", "15m", "30m", "60m", "1d"]
 
 MARKET_MODEL_PATH = "models/market/lstm_market.pt"
 

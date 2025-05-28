@@ -94,19 +94,30 @@ def save_cached_data(symbol, interval, df):
     path = os.path.join(CACHE_DIR, fname)
     df.to_csv(path)
 
+# ✅ 안정화된 버전
 def update_cache(symbol, interval, start, end):
     symbol = symbol.replace(".", "-")
     cached_df = load_cached_data(symbol, interval)
     latest_date = cached_df.index[-1] if not cached_df.empty else pd.to_datetime(start)
 
     try:
-        df_new = yf.download(symbol, start=latest_date, end=end, interval=interval, progress=False, group_by="column")
+        print(f"[다운로드 요청] {symbol} ({interval}) from {latest_date} to {end}")
+        ticker = yf.Ticker(symbol)
+        df_new = ticker.history(interval=interval, start=latest_date, end=end)
+
         if df_new.empty:
+            print(f"[경고] {symbol} {interval}: 다운로드된 데이터가 비어 있음")
             return cached_df
+
+        df_new.index = pd.to_datetime(df_new.index, errors="coerce")
+        if not df_new.index.tz:
+            df_new.index = df_new.index.tz_localize("UTC", ambiguous="NaT", nonexistent="NaT")
+
         df_combined = pd.concat([cached_df, df_new])
         df_combined = df_combined[~df_combined.index.duplicated(keep="last")]
         save_cached_data(symbol, interval, df_combined)
         return df_combined
+
     except Exception as e:
         print(f"❗ 다운로드 실패 ({symbol}, {interval}): {e}")
         return cached_df
@@ -128,8 +139,11 @@ def load_multitimeframe_data(symbol, index_symbol=INDEX_SYMBOL, start=START_DATE
                 data["index"][interval] = ind
     return data
 
-def build_lstm_dataset(symbol, window_size=30, target_shift=1, target_column="close"):
+#here
+def build_lstm_dataset(symbol, target_column="close"):
+    from config import SYMBOL_LIST, TARGET_INTERVAL
     mtf_data = load_multitimeframe_data(symbol)
+
     if not mtf_data["stock"] or not mtf_data["index"]:
         print("❌ 데이터 로딩 실패")
         return None, None
@@ -138,68 +152,67 @@ def build_lstm_dataset(symbol, window_size=30, target_shift=1, target_column="cl
         print(f"❌ {TARGET_INTERVAL} 분봉 데이터가 존재하지 않습니다.")
         return None, None
 
-    threshold = get_threshold(TARGET_INTERVAL)
-    intervals = ["2m", "5m", "15m", "30m", "60m", "1d"]
-    features = []
-    target_df = mtf_data["stock"][TARGET_INTERVAL]
-    if target_df is None:
-        print(f"❌ {symbol}의 {TARGET_INTERVAL} 데이터 없음 또는 지표 계산 실패")
-        return None, None
+    INTERVAL_MINUTES = {"2m": 2, "5m": 5, "15m": 15, "30m": 30, "60m": 60, "1d": 1440}
+    WINDOW_MINUTES = 60  # 1시간 기준으로 동기화
+    REQUIRED_LENGTH = {k: WINDOW_MINUTES // v for k, v in INTERVAL_MINUTES.items()}
 
+    target_df = mtf_data["stock"][TARGET_INTERVAL]
+    threshold = get_threshold(TARGET_INTERVAL)
+
+    features, labels = [], []
     ref_shape = None
-    for i in range(window_size, len(target_df) - target_shift):
+    for i in range(WINDOW_MINUTES, len(target_df) - 1):
+        anchor_time = target_df.index[i]
         stack = []
-        for interval in intervals:
+
+        for interval in INTERVAL_MINUTES.keys():
+            win_len = REQUIRED_LENGTH[interval]
             for key in ["stock", "index"]:
                 df = mtf_data[key].get(interval)
-                if df is None or len(df) < i:
+                if df is None or anchor_time not in df.index:
                     continue
-                slice = df.iloc[i - window_size:i]
-                if len(slice) < window_size:
-                    pad = np.zeros((window_size - len(slice), slice.shape[1]))
-                    slice = np.vstack([pad, slice.values])
+                df_slice = df[df.index <= anchor_time].tail(win_len)
+                if len(df_slice) < win_len:
+                    pad = np.zeros((win_len - len(df_slice), df.shape[1]))
+                    slice_arr = np.vstack([pad, df_slice.values])
                 else:
-                    slice = slice.values
-                stack.append(slice)
+                    slice_arr = df_slice.values
+                stack.append(slice_arr)
 
-        if not stack:
+        if len(stack) != len(INTERVAL_MINUTES) * 2:
             continue
 
         x = np.concatenate(stack, axis=1)
         if ref_shape is None:
             ref_shape = x.shape[1]
         if x.shape[1] != ref_shape:
-            print(f"⚠️ {symbol} {i}: shape 불일치 → 건너뜀")
             continue
-
         features.append(x)
+
+        # label
+        future = target_df[target_column].iloc[i + 1]
+        current = target_df[target_column].iloc[i]
+        change = (future - current) / current
+        if change > threshold:
+            labels.append(2)
+        elif change < -threshold:
+            labels.append(0)
+        else:
+            labels.append(1)
 
     if not features:
         return None, None
 
-    X = np.stack(features, axis=0)
+    X = np.stack(features)
+    y = np.array(labels)
+
+    # 정규화
     X = np.nan_to_num(X, nan=0.0, posinf=1e10, neginf=-1e10)
-
-    num_samples, seq_len, input_dim = X.shape
     scaler = MinMaxScaler()
-    X = X.reshape(-1, input_dim)
+    X = X.reshape(-1, X.shape[2])
     X = scaler.fit_transform(X)
-    X = X.reshape(num_samples, seq_len, input_dim)
+    X = X.reshape(-1, WINDOW_MINUTES, ref_shape)
 
-    y = []
-    close_series = target_df[target_column].values
-    for i in range(window_size, len(close_series) - target_shift):
-        future = close_series[i + target_shift]
-        current = close_series[i]
-        change = (future - current) / current
-        if change > threshold:
-            y.append(2)
-        elif change < -threshold:
-            y.append(0)
-        else:
-            y.append(1)
-
-    y = np.array(y)
     print("정답 라벨 분포:", np.unique(y, return_counts=True))
     return X, y
 
