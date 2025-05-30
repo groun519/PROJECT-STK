@@ -1,37 +1,58 @@
 import numpy as np
+import pandas as pd
 from sklearn.preprocessing import MinMaxScaler
 from data_fetcher import load_multitimeframe_data
-from labeling_utils import label_binary
+from labeling_utils import label_binary, label_three_class, label_position_class, label_return_regression
 from _data_config import (
     SYMBOL_LIST, TARGET_INTERVAL, TARGET_COLUMN,
-    INTERVAL_MINUTES, WINDOW_MINUTES,
-    LABEL_THRESHOLDS, REQUIRED_LENGTH
+    INTERVAL_MINUTES, REQUIRED_LENGTH, LABEL_THRESHOLDS
 )
 
 def get_threshold(interval):
     return LABEL_THRESHOLDS.get(interval, 0.01)
 
-def build_lstm_dataset(symbol):
+def get_label_function(mode="binary"):
+    if mode == "binary":
+        return label_binary
+    elif mode == "three":
+        return label_three_class
+    elif mode == "position":
+        return label_position_class
+    elif mode == "regression":
+        return label_return_regression
+    else:
+        raise ValueError(f"[라벨링 모드 오류] 지원하지 않는 라벨링 모드: {mode}")
+
+def normalize_features(X):
+    scaler = MinMaxScaler()
+    X = np.nan_to_num(X, nan=0.0, posinf=1e10, neginf=-1e10)
+    X = X.reshape(-1, X.shape[2])
+    X = scaler.fit_transform(X)
+    X = X.reshape(-1, X.shape[1], X.shape[2])
+    return X, scaler
+
+def build_lstm_dataset(symbol, label_mode='binary'):
     mtf_data = load_multitimeframe_data(symbol)
 
     if not mtf_data["stock"] or not mtf_data["index"]:
-        print("❌ 데이터 로딩 실패")
+        print(f"❌ {symbol}: 데이터 로딩 실패 (stock or index)")
         return None, None
 
     if TARGET_INTERVAL not in mtf_data["stock"]:
-        print(f"❌ {TARGET_INTERVAL} 분봉 데이터가 존재하지 않습니다.")
+        print(f"❌ {symbol}: {TARGET_INTERVAL} 분봉 데이터가 없습니다.")
         return None, None
 
     target_df = mtf_data["stock"][TARGET_INTERVAL]
     threshold = get_threshold(TARGET_INTERVAL)
+    label_fn = get_label_function(label_mode)
 
     features, labels = [], []
     ref_shape = None
 
-    for i in range(WINDOW_MINUTES, len(target_df) - 1):
+    for i in range(REQUIRED_LENGTH[TARGET_INTERVAL], len(target_df) - 1):
         anchor_time = target_df.index[i]
         stack = []
-        valid = True  # 유효한 샘플인지 플래그
+        valid = True
 
         for interval in INTERVAL_MINUTES.keys():
             win_len = REQUIRED_LENGTH[interval]
@@ -41,7 +62,7 @@ def build_lstm_dataset(symbol):
                     valid = False
                     break
 
-                # anchor_time이 index에 없으면 가장 가까운 시간 사용
+                # 가장 가까운 시간 기준으로 슬라이싱
                 if anchor_time not in df.index:
                     pos = df.index.get_indexer([anchor_time], method="nearest")[0]
                     if pos == -1:
@@ -72,27 +93,24 @@ def build_lstm_dataset(symbol):
 
         features.append(x)
 
-        # 라벨링: 이진 분류 (상승 vs 하락/보합)
-        label_df = target_df.iloc[i:i+2]
-        label = label_binary(label_df, threshold=threshold).iloc[0]
-        labels.append(label)
+        label_df = target_df.iloc[i:i+2]  # 2개로 슬라이싱
+        try:
+            label = label_fn(label_df, threshold=threshold).iloc[0]
+            labels.append(label)
+        except Exception as e:
+            print(f"❌ 라벨링 실패 @ {symbol}, {anchor_time}: {e}")
+            continue
 
     if not features:
         return None, None
 
     X = np.stack(features)
     y = np.array(labels)
-
-    # 정규화
-    X = np.nan_to_num(X, nan=0.0, posinf=1e10, neginf=-1e10)
-    scaler = MinMaxScaler()
-    X = X.reshape(-1, X.shape[2])
-    X = scaler.fit_transform(X)
-    X = X.reshape(-1, WINDOW_MINUTES, ref_shape)
+    X, _ = normalize_features(X)  # 현재는 scaler 반환 생략
 
     return X, y
 
-def build_generic_dataset(interval: str):
+def build_generic_dataset(interval: str, label_mode='binary'):
     global TARGET_INTERVAL
     TARGET_INTERVAL = interval
 
@@ -101,7 +119,7 @@ def build_generic_dataset(interval: str):
 
     for symbol in SYMBOL_LIST:
         print(f"📡 [{symbol} / {interval}] 데이터셋 생성 중...")
-        X, y = build_lstm_dataset(symbol)
+        X, y = build_lstm_dataset(symbol, label_mode=label_mode)
 
         if X is None or y is None:
             continue
@@ -122,8 +140,3 @@ def build_generic_dataset(interval: str):
     y = np.concatenate(y_all, axis=0)
     print(f"✅ {interval} 기준 총 샘플 수: {X.shape[0]}")
     return X, y
-
-def show_label_distribution(y):
-    unique, counts = np.unique(y, return_counts=True)
-    for u, c in zip(unique, counts):
-        print(f"  🟢 라벨 {u}: {c}개 ({(c / len(y)) * 100:.2f}%)")

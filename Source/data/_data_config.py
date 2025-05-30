@@ -1,5 +1,7 @@
 # _data_config.py
 
+from datetime import datetime
+
 ### 1. 심볼 설정 ###
 SYMBOL_LIST = ["AAPL", "MSFT", "GOOG"]
 INDEX_SYMBOL = "^IXIC"
@@ -12,24 +14,31 @@ END_DATE = "2025-05-01"
 TARGET_INTERVAL = "30m"
 TARGET_COLUMN = "close"
 INTERVAL_MINUTES = {
-    "2m": 2, 
-    "5m": 5, 
+    "2m": 2,
+    "5m": 5,
     "15m": 15,
-    "30m": 30, 
-    "60m": 60, 
+    "30m": 30,
+    "60m": 60,
     "1d": 1440,
 }
-WINDOW_MINUTES = 20
-REQUIRED_LENGTH = {k: WINDOW_MINUTES // v for k, v in INTERVAL_MINUTES.items()}
+
+# 🔧 날짜 기반 윈도우 수 자동 계산
+def compute_required_length(start_date: str, end_date: str, interval_dict: dict):
+    start_dt = datetime.strptime(start_date, "%Y-%m-%d")
+    end_dt = datetime.strptime(end_date, "%Y-%m-%d")
+    total_minutes = (end_dt - start_dt).days * 24 * 60
+    return {k: total_minutes // v for k, v in interval_dict.items()}
+
+REQUIRED_LENGTH = compute_required_length(START_DATE, END_DATE, INTERVAL_MINUTES)
 
 ### 4. 라벨링 설정 ###
 LABELING_MODE = "binary"  # binary, three_class, position, regression
 LABEL_THRESHOLDS = {
-    "2m": 0.003, 
+    "2m": 0.003,
     "5m": 0.005,
-    "15m": 0.007, 
+    "15m": 0.007,
     "30m": 0.01,
-    "60m": 0.012, 
+    "60m": 0.012,
     "1d": 0.015,
 }
 
