@@ -1,7 +1,8 @@
 import numpy as np
 from sklearn.preprocessing import MinMaxScaler
 from data_fetcher import load_multitimeframe_data
-from Source.data._data_config import (
+from labeling_utils import label_binary
+from _data_config import (
     SYMBOL_LIST, TARGET_INTERVAL, TARGET_COLUMN,
     INTERVAL_MINUTES, WINDOW_MINUTES,
     LABEL_THRESHOLDS, REQUIRED_LENGTH
@@ -30,41 +31,51 @@ def build_lstm_dataset(symbol):
     for i in range(WINDOW_MINUTES, len(target_df) - 1):
         anchor_time = target_df.index[i]
         stack = []
+        valid = True  # 유효한 샘플인지 플래그
 
         for interval in INTERVAL_MINUTES.keys():
             win_len = REQUIRED_LENGTH[interval]
             for key in ["stock", "index"]:
                 df = mtf_data[key].get(interval)
-                if df is None or anchor_time not in df.index:
-                    continue
-                df_slice = df[df.index <= anchor_time].tail(win_len)
+                if df is None or len(df) < win_len:
+                    valid = False
+                    break
+
+                # anchor_time이 index에 없으면 가장 가까운 시간 사용
+                if anchor_time not in df.index:
+                    pos = df.index.get_indexer([anchor_time], method="nearest")[0]
+                    if pos == -1:
+                        valid = False
+                        break
+                    nearest_time = df.index[pos]
+                else:
+                    nearest_time = anchor_time
+
+                df_slice = df[df.index <= nearest_time].tail(win_len)
                 if len(df_slice) < win_len:
                     pad = np.zeros((win_len - len(df_slice), df.shape[1]))
                     slice_arr = np.vstack([pad, df_slice.values])
                 else:
                     slice_arr = df_slice.values
+
                 stack.append(slice_arr)
 
-        if len(stack) != len(INTERVAL_MINUTES) * 2:
+        if not valid or len(stack) != len(INTERVAL_MINUTES) * 2:
             continue
 
         x = np.concatenate(stack, axis=1)
         if ref_shape is None:
             ref_shape = x.shape[1]
         if x.shape[1] != ref_shape:
+            print(f"⚠️ {symbol} @ {anchor_time}: feature shape mismatch ({x.shape[1]} != {ref_shape}) → 건너뜀")
             continue
 
         features.append(x)
 
         # 라벨링: 이진 분류 (상승 vs 하락/보합)
-        future = target_df[TARGET_COLUMN].iloc[i + 1]
-        current = target_df[TARGET_COLUMN].iloc[i]
-        change = (future - current) / current
-        label = 1 if change > threshold else 0
+        label_df = target_df.iloc[i:i+2]
+        label = label_binary(label_df, threshold=threshold).iloc[0]
         labels.append(label)
-
-        # 🎯 주석: 향후 수익률 회귀 예측 라벨링도 고려 가능
-        # labels.append(change)
 
     if not features:
         return None, None

@@ -1,7 +1,9 @@
+# data_fetcher.py
 import os
 import pandas as pd
 import yfinance as yf
-from config import INDEX_SYMBOL, START_DATE, END_DATE
+from _data_config import INDEX_SYMBOL, START_DATE, END_DATE
+from indicators import compute_technical_indicators  # ✅ 추가
 
 CACHE_DIR = "cache"
 os.makedirs(CACHE_DIR, exist_ok=True)
@@ -13,6 +15,7 @@ def load_cached_data(symbol, interval):
         try:
             df = pd.read_csv(path, index_col=0)
             df.index = pd.to_datetime(df.index, errors="coerce")
+            df = df[~df.index.isna()]
             if not df.index.tz:
                 df.index = df.index.tz_localize("UTC", ambiguous="NaT", nonexistent="NaT")
             return df
@@ -44,6 +47,13 @@ def update_cache(symbol, interval, start, end):
         if not df_new.index.tz:
             df_new.index = df_new.index.tz_localize("UTC", ambiguous="NaT", nonexistent="NaT")
 
+        df_new = compute_technical_indicators(df_new)  # ✅ 기술지표 적용
+
+        df_new = compute_technical_indicators(df_new)
+        if df_new.empty:
+            print(f"[지표 계산 실패] {symbol} ({interval}) → 데이터 제외")
+            return cached_df
+        
         df_combined = pd.concat([cached_df, df_new])
         df_combined = df_combined[~df_combined.index.duplicated(keep="last")]
         save_cached_data(symbol, interval, df_combined)

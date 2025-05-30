@@ -1,35 +1,26 @@
-# test_data_pipeline.py
+import numpy as np
+from dataset_builder import build_generic_dataset, SYMBOL_LIST
+from _data_config import TARGET_INTERVAL
 
-from _data_config import INTERVALS, SYMBOL_LIST, WINDOW_SIZE, TARGET_SHIFT, LABELING_MODE, LABEL_THRESHOLD
-from data_fetcher import fetch_merged_data
-from indicators import add_indicators
-from dataset_builder import build_dataset
-from labeling_utils import (
-    label_binary, label_three_class, label_position_class, label_return_regression
-)
+def test_pipeline():
+    print(f"📦 전체 파이프라인 테스트 시작 - 타겟 분봉: {TARGET_INTERVAL}")
+    X, y = build_generic_dataset(TARGET_INTERVAL)
 
-LABEL_FN_MAP = {
-    "binary": label_binary,
-    "three_class": label_three_class,
-    "position": label_position_class,
-    "regression": label_return_regression
-}
+    if X is None or y is None:
+        print("❌ 데이터셋 생성 실패")
+        return
 
-symbol = SYMBOL_LIST[0]
-interval = INTERVALS[0]
+    print(f"\n✅ 총 샘플 수: {X.shape[0]}개")
+    print(f"📐 입력 시퀀스 차원: {X.shape[1:]}")
+    print(f"🔍 첫 샘플 확인:")
+    print(f"  X[0] shape: {X[0].shape}")
+    print(f"  y[0] 라벨: {y[0]}")
 
-print(f"📡 테스트 시작: {symbol} / {interval}")
+    # 라벨 분포
+    unique, counts = np.unique(y, return_counts=True)
+    print(f"\n🎯 라벨 분포:")
+    for u, c in zip(unique, counts):
+        print(f"  - 라벨 {u}: {c}개 ({(c/len(y))*100:.2f}%)")
 
-df = fetch_merged_data(symbol=symbol, interval=interval)
-print("✅ 원본 데이터 수집 완료:", df.shape)
-
-df = add_indicators(df)
-print("✅ 기술지표 적용 완료:", df.columns.tolist())
-
-X, y = build_dataset(df, window_size=WINDOW_SIZE)
-
-label_fn = LABEL_FN_MAP[LABELING_MODE]
-labels = label_fn(df, threshold=LABEL_THRESHOLD)
-
-print("✅ 최종 라벨 예시:", labels.dropna().value_counts())
-print("✅ 입력 데이터 shape:", X.shape, "| 라벨 shape:", y.shape)
+if __name__ == "__main__":
+    test_pipeline()
