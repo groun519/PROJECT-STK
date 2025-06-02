@@ -14,18 +14,6 @@ from _data_config import (
 def get_threshold(interval):
     return LABEL_THRESHOLDS.get(interval, 0.01)
 
-def get_label_function(mode="binary"):
-    if mode == "binary":
-        return label_binary
-    elif mode == "three":
-        return label_three_class
-    elif mode == "position":
-        return label_position_class
-    elif mode == "regression":
-        return label_return_regression
-    else:
-        raise ValueError(f"[라벨링 모드 오류] 지원하지 않는 라벨링 모드: {mode}")
-
 def normalize_features(X):
     scaler = MinMaxScaler()
     X = np.nan_to_num(X, nan=0.0, posinf=1e10, neginf=-1e10)
@@ -35,9 +23,6 @@ def normalize_features(X):
     return X, scaler
 
 def build_lstm_dataset(symbol):
-    from data_fetcher import load_multitimeframe_data
-
-    # 데이터 가져오기
     mtf_data = load_multitimeframe_data(symbol)
     if not mtf_data["stock"] or not mtf_data["index"]:
         print(f"❌ {symbol}: 데이터 로딩 실패 (stock or index)")
@@ -49,12 +34,10 @@ def build_lstm_dataset(symbol):
 
     target_df = mtf_data["stock"][TARGET_INTERVAL]
     threshold = get_threshold(TARGET_INTERVAL)
-    label_fn = get_label_function(LABELING_MODE)
 
     features, labels = [], []
     ref_shape = None
 
-    # (불필요하게 복잡한 index 변환 등은 생략)
     for i in range(REQUIRED_LENGTH[TARGET_INTERVAL], len(target_df) - 1):
         anchor_time = target_df.index[i]
         stack, valid = [], True
@@ -67,12 +50,11 @@ def build_lstm_dataset(symbol):
                     valid = False
                     break
 
-                # anchor_time에 근접한 위치에서 win_len 만큼 슬라이스
                 pos = df.index.get_indexer([anchor_time], method="nearest")[0]
                 if pos == -1 or pos < win_len:
                     valid = False
                     break
-                df_slice = df.iloc[pos - win_len + 1: pos + 1]
+                df_slice = df.iloc[pos - win_len + 1 : pos + 1]
                 if len(df_slice) < win_len:
                     valid = False
                     break
@@ -92,17 +74,22 @@ def build_lstm_dataset(symbol):
         features.append(x)
         label_df = target_df.iloc[i:i+2]
         try:
-            label = label_fn(label_df, threshold=threshold).iloc[0]
-            labels.append(label)
+            label_dict = {
+                "binary": label_binary(label_df, threshold=threshold).iloc[0],
+                "three": label_three_class(label_df, threshold=threshold).iloc[0],
+                "position": label_position_class(label_df, threshold=threshold).iloc[0],
+                "regression": label_return_regression(label_df, threshold=threshold).iloc[0]
+            }
+            labels.append(label_dict)
         except Exception as e:
             print(f"❌ 라벨 생성 실패: {e}")
             continue
 
     X = np.stack(features, axis=0) if features else None
-    y = np.array(labels) if labels else None
+    y = labels if labels else None
     return X, y
 
-def build_generic_dataset(interval: str, label_mode='binary'):
+def build_generic_dataset(interval: str):
     global TARGET_INTERVAL
     TARGET_INTERVAL = interval
 
@@ -111,7 +98,7 @@ def build_generic_dataset(interval: str, label_mode='binary'):
 
     for symbol in SYMBOL_LIST:
         print(f"📡 [{symbol} / {interval}] 데이터셋 생성 중...")
-        X, y = build_lstm_dataset(symbol, label_mode=label_mode)
+        X, y = build_lstm_dataset(symbol)
 
         if X is None or y is None:
             continue
@@ -122,13 +109,13 @@ def build_generic_dataset(interval: str, label_mode='binary'):
             continue
 
         X_all.append(X)
-        y_all.append(y)
+        y_all.extend(y)  # 리스트니까 그냥 extend
 
     if not X_all:
         print(f"❌ {interval} 기준 학습 가능한 데이터 없음")
         return None, None
 
     X = np.concatenate(X_all, axis=0)
-    y = np.concatenate(y_all, axis=0)
+    y = y_all
     print(f"✅ {interval} 기준 총 샘플 수: {X.shape[0]}")
     return X, y
