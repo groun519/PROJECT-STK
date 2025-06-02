@@ -2,7 +2,10 @@ import numpy as np
 import pandas as pd
 from sklearn.preprocessing import MinMaxScaler
 from data_fetcher import load_multitimeframe_data
-from labeling_utils import label_binary, label_three_class, label_position_class, label_return_regression
+from labeling_utils import (
+    label_binary, label_three_class,
+    label_position_class, label_return_regression
+)
 from _data_config import (
     SYMBOL_LIST, TARGET_INTERVAL, TARGET_COLUMN,
     INTERVAL_MINUTES, REQUIRED_LENGTH, LABEL_THRESHOLDS
@@ -31,9 +34,11 @@ def normalize_features(X):
     X = X.reshape(-1, X.shape[1], X.shape[2])
     return X, scaler
 
-def build_lstm_dataset(symbol, label_mode='binary'):
-    mtf_data = load_multitimeframe_data(symbol)
+def build_lstm_dataset(symbol):
+    from data_fetcher import load_multitimeframe_data
 
+    # 데이터 가져오기
+    mtf_data = load_multitimeframe_data(symbol)
     if not mtf_data["stock"] or not mtf_data["index"]:
         print(f"❌ {symbol}: 데이터 로딩 실패 (stock or index)")
         return None, None
@@ -44,15 +49,15 @@ def build_lstm_dataset(symbol, label_mode='binary'):
 
     target_df = mtf_data["stock"][TARGET_INTERVAL]
     threshold = get_threshold(TARGET_INTERVAL)
-    label_fn = get_label_function(label_mode)
+    label_fn = get_label_function(LABELING_MODE)
 
     features, labels = [], []
     ref_shape = None
 
+    # (불필요하게 복잡한 index 변환 등은 생략)
     for i in range(REQUIRED_LENGTH[TARGET_INTERVAL], len(target_df) - 1):
         anchor_time = target_df.index[i]
-        stack = []
-        valid = True
+        stack, valid = [], True
 
         for interval in INTERVAL_MINUTES.keys():
             win_len = REQUIRED_LENGTH[interval]
@@ -62,24 +67,18 @@ def build_lstm_dataset(symbol, label_mode='binary'):
                     valid = False
                     break
 
-                # 가장 가까운 시간 기준으로 슬라이싱
-                if anchor_time not in df.index:
-                    pos = df.index.get_indexer([anchor_time], method="nearest")[0]
-                    if pos == -1:
-                        valid = False
-                        break
-                    nearest_time = df.index[pos]
-                else:
-                    nearest_time = anchor_time
-
-                df_slice = df[df.index <= nearest_time].tail(win_len)
+                # anchor_time에 근접한 위치에서 win_len 만큼 슬라이스
+                pos = df.index.get_indexer([anchor_time], method="nearest")[0]
+                if pos == -1 or pos < win_len:
+                    valid = False
+                    break
+                df_slice = df.iloc[pos - win_len + 1: pos + 1]
                 if len(df_slice) < win_len:
-                    pad = np.zeros((win_len - len(df_slice), df.shape[1]))
-                    slice_arr = np.vstack([pad, df_slice.values])
-                else:
-                    slice_arr = df_slice.values
-
-                stack.append(slice_arr)
+                    valid = False
+                    break
+                stack.append(df_slice.values)
+            if not valid:
+                break
 
         if not valid or len(stack) != len(INTERVAL_MINUTES) * 2:
             continue
@@ -88,26 +87,19 @@ def build_lstm_dataset(symbol, label_mode='binary'):
         if ref_shape is None:
             ref_shape = x.shape[1]
         if x.shape[1] != ref_shape:
-            print(f"⚠️ {symbol} @ {anchor_time}: feature shape mismatch ({x.shape[1]} != {ref_shape}) → 건너뜀")
             continue
 
         features.append(x)
-
-        label_df = target_df.iloc[i:i+2]  # 2개로 슬라이싱
+        label_df = target_df.iloc[i:i+2]
         try:
             label = label_fn(label_df, threshold=threshold).iloc[0]
             labels.append(label)
         except Exception as e:
-            print(f"❌ 라벨링 실패 @ {symbol}, {anchor_time}: {e}")
+            print(f"❌ 라벨 생성 실패: {e}")
             continue
 
-    if not features:
-        return None, None
-
-    X = np.stack(features)
-    y = np.array(labels)
-    X, _ = normalize_features(X)  # 현재는 scaler 반환 생략
-
+    X = np.stack(features, axis=0) if features else None
+    y = np.array(labels) if labels else None
     return X, y
 
 def build_generic_dataset(interval: str, label_mode='binary'):

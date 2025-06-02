@@ -11,7 +11,6 @@ os.makedirs(CACHE_DIR, exist_ok=True)
 
 # ✅ 분봉별 라벨 기준 설정
 LABEL_THRESHOLDS = {
-    "2m": 0.003,
     "5m": 0.005,
     "15m": 0.007,
     "30m": 0.01,
@@ -123,7 +122,7 @@ def update_cache(symbol, interval, start, end):
         return cached_df
 
 def load_multitimeframe_data(symbol, index_symbol=INDEX_SYMBOL, start=START_DATE, end=END_DATE):
-    intervals = ["2m", "5m", "15m", "30m", "60m", "1d"]
+    intervals = ["5m", "15m", "30m", "60m", "1d"]
     data = {"stock": {}, "index": {}}
     for interval in intervals:
         stock_df = update_cache(symbol, interval, start, end)
