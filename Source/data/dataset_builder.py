@@ -1,11 +1,7 @@
 import numpy as np
 import pandas as pd
-from sklearn.preprocessing import MinMaxScaler
 from data_fetcher import load_multitimeframe_data
-from labeling_utils import (
-    label_binary, label_three_class,
-    label_position_class, label_return_regression
-)
+from labeling_utils import get_all_labels
 from _data_config import (
     SYMBOL_LIST, TARGET_INTERVAL, TARGET_COLUMN,
     INTERVAL_MINUTES, REQUIRED_LENGTH, LABEL_THRESHOLDS
@@ -13,14 +9,6 @@ from _data_config import (
 
 def get_threshold(interval):
     return LABEL_THRESHOLDS.get(interval, 0.01)
-
-def normalize_features(X):
-    scaler = MinMaxScaler()
-    X = np.nan_to_num(X, nan=0.0, posinf=1e10, neginf=-1e10)
-    X = X.reshape(-1, X.shape[2])
-    X = scaler.fit_transform(X)
-    X = X.reshape(-1, X.shape[1], X.shape[2])
-    return X, scaler
 
 def build_lstm_dataset(symbol):
     mtf_data = load_multitimeframe_data(symbol)
@@ -74,12 +62,7 @@ def build_lstm_dataset(symbol):
         features.append(x)
         label_df = target_df.iloc[i:i+2]
         try:
-            label_dict = {
-                "binary": label_binary(label_df, threshold=threshold).iloc[0],
-                "three": label_three_class(label_df, threshold=threshold).iloc[0],
-                "position": label_position_class(label_df, threshold=threshold).iloc[0],
-                "regression": label_return_regression(label_df, threshold=threshold).iloc[0]
-            }
+            label_dict = get_all_labels(label_df, threshold)
             labels.append(label_dict)
         except Exception as e:
             print(f"❌ 라벨 생성 실패: {e}")
@@ -109,7 +92,7 @@ def build_generic_dataset(interval: str):
             continue
 
         X_all.append(X)
-        y_all.extend(y)  # 리스트니까 그냥 extend
+        y_all.extend(y)
 
     if not X_all:
         print(f"❌ {interval} 기준 학습 가능한 데이터 없음")

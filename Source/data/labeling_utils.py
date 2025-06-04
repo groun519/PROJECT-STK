@@ -29,10 +29,18 @@ def label_regression(df, threshold=None):
     change = (future - current) / current
     return np.array([change])
 
+def label_candle_regression(df, threshold=None):
+    o = df["open"].values[-1]
+    h = df["high"].values[-1]
+    l = df["low"].values[-1]
+    c = df["close"].values[-1]
+    return np.array([o, h, l, c])
+
 def get_all_labels(df, threshold):
     return {
         "binary": label_binary(df, threshold)[0],
         "three_class": label_three_class(df, threshold)[0],
         "position": label_position(df, threshold)[0],
         "regression": label_regression(df)[0],
+        "candle": label_candle_regression(df),
     }
