@@ -1,46 +1,47 @@
 import numpy as np
 
-def label_binary(df, threshold):
-    # 상승/하락 구분
-    future = df["close"].values[-1]
+def label_trend(df):
+    """주가 변화율을 실수로 반환 (종가 기준)"""
     current = df["close"].values[0]
-    change = (future - current) / current
-    return np.array([1 if abs(change) > threshold else 0])
+    future = df["close"].values[-1]
+    return np.array([(future - current) / current])
 
-def label_three_class(df, threshold):
-    future = df["close"].values[-1]
+def label_regression(df, n=1):
+    """N시점 뒤의 변화율"""
     current = df["close"].values[0]
-    change = (future - current) / current
-    if change > threshold:
-        return np.array([2])  # 상승
-    elif change < -threshold:
-        return np.array([0])  # 하락
+    if len(df["close"].values) <= n:
+        return np.array([0.0])
+    future = df["close"].values[n]
+    return np.array([(future - current) / current])
+
+def label_candle_regression(df, n=1):
+    """N시점 뒤의 open/high/low/close"""
+    if len(df) <= n:
+        o, h, l, c = df.iloc[-1][["open","high","low","close"]]
     else:
-        return np.array([1])  # 관망
-
-def label_position(df, threshold):
-    # 단순 예시: 포지션 [매수/관망/매도]
-    return label_three_class(df, threshold)
-
-def label_regression(df, threshold=None):
-    # 수익률 예측 (정규화)
-    future = df["close"].values[-1]
-    current = df["close"].values[0]
-    change = (future - current) / current
-    return np.array([change])
-
-def label_candle_regression(df, threshold=None):
-    o = df["open"].values[-1]
-    h = df["high"].values[-1]
-    l = df["low"].values[-1]
-    c = df["close"].values[-1]
+        o, h, l, c = df.iloc[n][["open","high","low","close"]]
     return np.array([o, h, l, c])
 
-def get_all_labels(df, threshold):
+def label_position(df, threshold=0.01):
+    """
+    종가 변화율 기준으로 [-1, 1] 실수값 추천.
+    -1: 강매도, 0: 관망, 1: 강매수
+    """
+    current = df["close"].values[0]
+    future = df["close"].values[-1]
+    change = (future - current) / current
+    # 매수/매도 비중은 비선형 scaling도 가능, 우선은 단순 선형
+    # threshold 기준 미만은 0(관망), 이상은 비율로 환산
+    if abs(change) < threshold:
+        return np.array([0.0])  # 관망
+    return np.array([np.clip(change, -1.0, 1.0)])
+
+
+def get_all_labels(df, n=1, threshold=0.01):
     return {
-        "binary": label_binary(df, threshold)[0],
-        "three_class": label_three_class(df, threshold)[0],
-        "position": label_position(df, threshold)[0],
-        "regression": label_regression(df)[0],
-        "candle": label_candle_regression(df),
+        "trend": label_trend(df)[0],
+        "regression": label_regression(df, n=n)[0],
+        "candle": label_candle_regression(df, n=n),
+        "highest": np.max(df["high"].values),
+        "position": label_position(df, threshold=threshold)[0],
     }

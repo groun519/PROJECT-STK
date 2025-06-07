@@ -1,9 +1,11 @@
 import os
+import numpy as np
 import pandas as pd
 import yfinance as yf
-from datetime import datetime, timedelta
-from _data_config import (
-    DATA_PATH, INTERVAL_MINUTES, START_DATE, END_DATE, INDEX_SYMBOL
+import ta
+
+from data._data_config import (
+    DATA_PATH, INTERVAL_MINUTES, START_DATE, END_DATE, INDEX_SYMBOL, TECHNICAL_INDICATORS, TECHNICAL_PARAMS
 )
 
 def download_data_with_cache(symbol, interval, start, end):
@@ -63,9 +65,77 @@ def load_multitimeframe_data(symbol, index_symbol=INDEX_SYMBOL, start=START_DATE
 
         if df_symbol is not None and not df_symbol.empty:
             df_symbol = clean_df_index(df_symbol)
-            stock_data[interval] = df_symbol
+            # ✅ 지표 계산 추가
+            df_symbol = compute_indicators(df_symbol)
+            if df_symbol is None or df_symbol.empty:
+                print(f"[{symbol}][{interval}] 기술지표 계산 실패/결측치로 데이터 제외됨")
+            else:
+                stock_data[interval] = df_symbol
         if df_index is not None and not df_index.empty:
-            df_symbol = clean_df_index(df_index)
-            index_data[interval] = df_index
+            df_index = clean_df_index(df_index)
+            # ✅ 지표 계산 추가
+            df_index = compute_indicators(df_index)
+            if df_index is None or df_index.empty:
+                print(f"[{index_symbol}][{interval}] 기술지표 계산 실패/결측치로 데이터 제외됨")
+            else:
+                index_data[interval] = df_index
 
     return {"stock": stock_data, "index": index_data}
+
+def compute_indicators(df):
+    # 컬럼명 소문자화
+    df.columns = [str(c).lower() for c in df.columns]
+    # 필수 칼럼 확인
+    for col in ["open", "high", "low", "close", "volume"]:
+        if col not in df.columns:
+            print(f"[지표 계산 예외] 필수 컬럼 누락: {col}")
+            return None
+
+    try:
+        close = df["close"]
+        high = df["high"]
+        low = df["low"]
+        volume = df["volume"]
+
+        # RSI
+        if "rsi" in TECHNICAL_INDICATORS:
+            window = TECHNICAL_PARAMS["rsi"].get("window", 14)
+            df["rsi"] = ta.momentum.RSIIndicator(close, window=window).rsi()
+        # MACD
+        if "macd" in TECHNICAL_INDICATORS:
+            p = TECHNICAL_PARAMS["macd"]
+            macd = ta.trend.MACD(
+                close, 
+                window_slow=p.get("slow", 26), 
+                window_fast=p.get("fast", 12), 
+                window_sign=p.get("signal", 9)
+            )
+            df["macd"] = macd.macd_diff()
+        # 볼린저밴드
+        if "boll_upper" in TECHNICAL_INDICATORS or "boll_lower" in TECHNICAL_INDICATORS:
+            window = TECHNICAL_PARAMS["boll"].get("window", 20)
+            std = TECHNICAL_PARAMS["boll"].get("std", 2)
+            boll = ta.volatility.BollingerBands(close, window=window, window_dev=std)
+            if "boll_upper" in TECHNICAL_INDICATORS:
+                df["boll_upper"] = boll.bollinger_hband()
+            if "boll_lower" in TECHNICAL_INDICATORS:
+                df["boll_lower"] = boll.bollinger_lband()
+        # 거래량 변화율
+        if "volume_change" in TECHNICAL_INDICATORS:
+            df["volume_change"] = volume.pct_change()
+
+        # NaN/inf 처리 및 칼럼별 예외 로깅
+        before_shape = df.shape[0]
+        df = df.replace([np.inf, -np.inf], np.nan)
+        nan_cols = df.columns[df.isna().any()].tolist()
+        if nan_cols:
+            print(f"[지표 계산 NaN/inf] 결측치 발생 칼럼: {nan_cols}")
+        df = df.dropna()
+        after_shape = df.shape[0]
+        if before_shape != after_shape:
+            print(f"[지표 계산 dropna] 결측치로 {before_shape - after_shape}행 삭제")
+        return df
+
+    except Exception as e:
+        print(f"[지표 계산 실패] {e}")
+        return None

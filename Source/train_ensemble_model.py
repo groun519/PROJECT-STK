@@ -1,110 +1,61 @@
 import os
-import time
 import torch
-import torch.nn as nn
 import numpy as np
 from torch.utils.data import DataLoader, TensorDataset
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import classification_report, accuracy_score, confusion_matrix
-from sklearn.utils.multiclass import unique_labels
-import seaborn as sns
-import matplotlib.pyplot as plt
-from torch.utils.tensorboard import SummaryWriter
-from data_utils import build_generic_dataset
-from model_transformer import LSTMTransformer
+from data.dataset_builder import build_generic_dataset
+from model_transformer import MultiHeadTransformer
+from _model_config import EPOCHS, BATCH_SIZE, DEVICE, MODEL_SAVE_PATH, INTERVALS, LABEL_KEYS
 
-# 🔧 설정값
-INTERVALS = ["2m", "5m", "15m", "30m", "60m", "1d"]
-BATCH_SIZE = 64
-EPOCHS = 30
-LEARNING_RATE = 0.001
+def to_tensor(arr, dtype=torch.float):
+    if arr is None:
+        return None
+    arr = np.array(arr)
+    if arr.dtype == np.int32 or arr.dtype == np.int64:
+        return torch.tensor(arr, dtype=torch.long)
+    return torch.tensor(arr, dtype=dtype)
 
-def plot_confusion_matrix(y_true, y_pred, class_names, save_path):
-    cm = confusion_matrix(y_true, y_pred)
-    fig, ax = plt.subplots(figsize=(4, 4))
-    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues',
-                xticklabels=class_names, yticklabels=class_names, ax=ax)
-    ax.set_xlabel("Predicted")
-    ax.set_ylabel("Actual")
-    ax.set_title("Confusion Matrix")
-    fig.tight_layout()
-    fig.savefig(save_path)
-    plt.close(fig)
-    return save_path
+def train_for_interval(interval, model_save_dir):
+    print(f"===== [{interval}] 모델 학습 시작 =====")
+    X, y_dict = build_generic_dataset(interval)
+    if X is None or y_dict is None or not all([k in y_dict for k in LABEL_KEYS]):
+        print(f"[{interval}] 데이터셋 없음, 건너뜀")
+        return
 
-for interval in INTERVALS:
-    print(f"\n🚀 [{interval}] 분봉 기준 범용 모델 학습 시작")
-    run_start = time.time()
-
-    # ✅ 수정된 호출부: 불필요한 인자 제거
-    X, y = build_generic_dataset(interval=interval)
-    if X is None or y is None:
-        print(f"❌ [{interval}] 학습 데이터 생성 실패 → 건너뜀")
-        continue
-
-    label_counts = np.unique(y, return_counts=True)
-    print(f"📊 라벨 분포: {dict(zip(*label_counts))}")
-
-    writer = SummaryWriter(log_dir=f"runs/{interval}")
-    writer.add_text("Hyperparameters", f"Interval={interval}, BatchSize={BATCH_SIZE}, Epochs={EPOCHS}, LR={LEARNING_RATE}")
-    for label, count in zip(*label_counts):
-        writer.add_scalar("LabelDistribution/Class_" + str(label), count, 0)
-
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, stratify=y, random_state=42)
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    X_tensor = to_tensor(X)
+    y_tensors = {k: to_tensor(y_dict[k]) for k in LABEL_KEYS if y_dict[k] is not None}
+    dataset = TensorDataset(X_tensor, *[y_tensors[k] for k in LABEL_KEYS])
+    loader = DataLoader(dataset, batch_size=BATCH_SIZE, shuffle=True)
 
     input_dim = X.shape[2]
-    model = LSTMTransformer(input_size=input_dim).to(device)
-    criterion = nn.CrossEntropyLoss()
-    optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE)
-
-    train_ds = TensorDataset(torch.tensor(X_train, dtype=torch.float32),
-                             torch.tensor(y_train, dtype=torch.long))
-    train_loader = DataLoader(train_ds, batch_size=BATCH_SIZE, shuffle=True)
+    seq_len = X.shape[1]
+    model = MultiHeadTransformer(input_dim=input_dim, seq_len=seq_len, device=DEVICE).to(DEVICE)
+    optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
 
     for epoch in range(EPOCHS):
-        epoch_start = time.time()
         model.train()
-        total_loss, correct = 0, 0
-
-        for xb, yb in train_loader:
-            xb, yb = xb.to(device), yb.to(device)
+        total_loss = 0
+        for batch in loader:
+            x = batch[0].to(DEVICE)
+            y_dict_batch = {k: batch[i+1].to(DEVICE) for i, k in enumerate(LABEL_KEYS)}
+            outputs = model(x)
+            loss, loss_dict = model.get_loss(outputs, y_dict_batch)
             optimizer.zero_grad()
-            out = model(xb)
-            loss = criterion(out, yb)
             loss.backward()
             optimizer.step()
-
             total_loss += loss.item()
-            correct += (out.argmax(dim=1) == yb).sum().item()
+        avg_loss = total_loss / len(loader)
+        print(f"[{interval}] Epoch {epoch+1}/{EPOCHS} | Loss: {avg_loss:.4f} | " +
+              " ".join([f"{k}:{loss_dict[k]:.4f}" for k in loss_dict]))
 
-        acc = correct / len(train_ds)
-        writer.add_scalar("Train/Loss", total_loss, epoch)
-        writer.add_scalar("Train/Accuracy", acc, epoch)
-        writer.add_scalar("Epoch/Duration_sec", time.time() - epoch_start, epoch)
-
-        print(f"[{epoch+1}/{EPOCHS}] Loss: {total_loss:.4f} | Train Acc: {acc*100:.2f}%")
-
-    os.makedirs("models", exist_ok=True)
-    model_path = f"models/direction_model_{interval}.pt"
+    os.makedirs(model_save_dir, exist_ok=True)
+    model_path = os.path.join(model_save_dir, f"{interval}_model.pt")
     torch.save(model.state_dict(), model_path)
-    print(f"\n✅ 저장 완료: {model_path}")
+    print(f"[{interval}] 모델 저장 완료: {model_path}")
 
-    model.eval()
-    with torch.no_grad():
-        logits = model(torch.tensor(X_test, dtype=torch.float32).to(device))
-        preds = logits.argmax(dim=1).cpu().numpy()
+def main():
+    model_save_dir = MODEL_SAVE_PATH
+    for interval in INTERVALS:
+        train_for_interval(interval, model_save_dir)
 
-    val_acc = accuracy_score(y_test, preds)
-    writer.add_scalar("Val/Accuracy", val_acc, EPOCHS)
-    print("\n📊 [검증 결과]")
-    print(classification_report(y_test, preds, digits=4))
-
-    cm_path = f"runs/{interval}/confusion_matrix.png"
-    saved_cm_path = plot_confusion_matrix(y_test, preds, class_names=["Down", "Neutral", "Up"], save_path=cm_path)
-    writer.add_image("Val/ConfusionMatrix", 
-                     torch.tensor(plt.imread(saved_cm_path)).permute(2, 0, 1), 
-                     global_step=EPOCHS)
-
-    writer.add_scalar("Training/TotalTime_sec", time.time() - run_start, 0)
-    writer.close()
+if __name__ == "__main__":
+    main()

@@ -1,10 +1,10 @@
 import numpy as np
 import pandas as pd
-from data_fetcher import load_multitimeframe_data
-from labeling_utils import get_all_labels
-from _data_config import (
-    SYMBOL_LIST, TARGET_INTERVAL, TARGET_COLUMN,
-    INTERVAL_MINUTES, REQUIRED_LENGTH, LABEL_THRESHOLDS
+from data.data_fetcher import load_multitimeframe_data
+from data.labeling_utils import get_all_labels
+from data._data_config import (
+    SYMBOL_LIST, TARGET_INTERVAL, 
+    INTERVAL_MINUTES, REQUIRED_LENGTH, LABEL_THRESHOLDS, TECHNICAL_INDICATORS
 )
 
 def get_threshold(interval):
@@ -35,6 +35,14 @@ def build_lstm_dataset(symbol):
             for key in ["stock", "index"]:
                 df = mtf_data[key].get(interval)
                 if df is None or len(df) < win_len:
+                    print(f"[{symbol}][{interval}][{key}] 데이터 없음 or 부족, 건너뜀")
+                    valid = False
+                    break
+
+                # ✅ 기술지표 누락 체크
+                missing_cols = [col for col in TECHNICAL_INDICATORS if col not in df.columns]
+                if missing_cols:
+                    print(f"[{symbol}][{interval}][{key}] 누락된 기술지표 칼럼: {missing_cols}")
                     valid = False
                     break
 
@@ -47,6 +55,7 @@ def build_lstm_dataset(symbol):
                     valid = False
                     break
                 stack.append(df_slice.values)
+
             if not valid:
                 break
 

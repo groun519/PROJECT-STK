@@ -1,6 +1,6 @@
 import pandas as pd
 import ta
-from _data_config import TECHNICAL_INDICATORS, TECHNICAL_PARAMS
+from data._data_config import TECHNICAL_INDICATORS, TECHNICAL_PARAMS
 
 def compute_technical_indicators(df: pd.DataFrame) -> pd.DataFrame:
     """
