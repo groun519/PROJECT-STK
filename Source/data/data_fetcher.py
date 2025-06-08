@@ -10,13 +10,14 @@ from data._data_config import (
 )
 
 def download_data_with_cache(symbol, interval, start, end):
-    
     os.makedirs(DATA_PATH, exist_ok=True)
-    
     cache_path = f"{DATA_PATH}/{symbol}_{interval}.csv"
     if os.path.exists(cache_path):
         print(f"[캐시 적중] {symbol} ({interval})")
-        return pd.read_csv(cache_path, index_col=0, header=0, parse_dates=True, date_format="%Y-%m-%d %H:%M:%S")
+        df = pd.read_csv(cache_path, index_col=0, header=0, parse_dates=True, date_format="%Y-%m-%d %H:%M:%S")
+        # NASDAQ 거래일 정렬 적용
+        df = align_to_nasdaq_trading_days(df, start, end)
+        return df
 
     print(f"[다운로드 요청] {symbol} ({interval}) from {start} to {end}")
     try:
@@ -24,9 +25,11 @@ def download_data_with_cache(symbol, interval, start, end):
         if df.empty or len(df) < 10:
             print(f"[데이터 부족] {symbol} ({interval}) → 스킵")
             return None
+        # NASDAQ 거래일 정렬 적용
+        df = align_to_nasdaq_trading_days(df, start, end)
         df.to_csv(cache_path, date_format="%Y-%m-%d %H:%M:%S")
         return df
-    
+
     except Exception as e:
         print(f"[다운로드 오류] {symbol} ({interval}) → {e}")
         return None
