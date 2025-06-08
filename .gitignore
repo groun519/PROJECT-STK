@@ -1,2 +1,4 @@
 
-/__pycache__
+/cache
+/Source/__pycache__
+/Source/data/__pycache__

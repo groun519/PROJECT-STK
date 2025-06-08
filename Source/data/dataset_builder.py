@@ -28,7 +28,6 @@ def build_lstm_dataset(symbol):
 
     for i in range(REQUIRED_LENGTH[TARGET_INTERVAL], len(target_df) - 1):
         anchor_time = target_df.index[i]
-        anchor_time = pd.to_datetime(anchor_time)
         stack, valid = [], True
 
         for interval in INTERVAL_MINUTES.keys():
@@ -47,7 +46,9 @@ def build_lstm_dataset(symbol):
                     valid = False
                     break
                 
+                df.index = pd.to_datetime(df.index)
                 pos = df.index.get_indexer([anchor_time], method="nearest")[0]
+                
                 if pos == -1 or pos < win_len:
                     valid = False
                     break
@@ -59,27 +60,32 @@ def build_lstm_dataset(symbol):
 
             if not valid:
                 break
-
-        if not valid or len(stack) != len(INTERVAL_MINUTES) * 2:
-            continue
-
+        
+        # if not valid or len(stack) != len(INTERVAL_MINUTES) * 2:
+        #     continue
+        
+        for idx, arr in enumerate(stack):
+            print(f"stack[{idx}] shape: {arr.shape}")
         x = np.concatenate(stack, axis=1)
+        
         if ref_shape is None:
             ref_shape = x.shape[1]
         if x.shape[1] != ref_shape:
             continue
-
+        
         features.append(x)
         label_df = target_df.iloc[i:i+2]
+        
         try:
             label_dict = get_all_labels(label_df, threshold)
             labels.append(label_dict)
         except Exception as e:
             print(f"❌ 라벨 생성 실패: {e}")
             continue
-
+    
     X = np.stack(features, axis=0) if features else None
     y = labels if labels else None
+    
     return X, y
 
 def build_generic_dataset(interval: str):
