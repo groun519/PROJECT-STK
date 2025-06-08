@@ -28,16 +28,17 @@ def build_lstm_dataset(symbol):
 
     for i in range(REQUIRED_LENGTH[TARGET_INTERVAL], len(target_df) - 1):
         anchor_time = target_df.index[i]
+        anchor_time = pd.to_datetime(anchor_time)
         stack, valid = [], True
 
         for interval in INTERVAL_MINUTES.keys():
             win_len = REQUIRED_LENGTH[interval]
             for key in ["stock", "index"]:
                 df = mtf_data[key].get(interval)
-                if df is None or len(df) < win_len:
-                    print(f"[{symbol}][{interval}][{key}] 데이터 없음 or 부족, 건너뜀")
-                    valid = False
-                    break
+                # if df is None or len(df) < win_len:
+                #     print(f"[{symbol}][{interval}][{key}] 데이터 없음 or 부족, 건너뜀")
+                #     valid = False
+                #     break
 
                 # ✅ 기술지표 누락 체크
                 missing_cols = [col for col in TECHNICAL_INDICATORS if col not in df.columns]
@@ -45,7 +46,7 @@ def build_lstm_dataset(symbol):
                     print(f"[{symbol}][{interval}][{key}] 누락된 기술지표 칼럼: {missing_cols}")
                     valid = False
                     break
-
+                
                 pos = df.index.get_indexer([anchor_time], method="nearest")[0]
                 if pos == -1 or pos < win_len:
                     valid = False

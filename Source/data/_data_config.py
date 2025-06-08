@@ -33,11 +33,11 @@ def get_dynamic_required_length(index_symbol, interval, start, end, margin_days=
     return winlen
 
 REQUIRED_LENGTH = {
-    "5m": get_dynamic_required_length(INDEX_SYMBOL, "5m", START_DATE, END_DATE, margin_days=3),
-    "15m": get_dynamic_required_length(INDEX_SYMBOL, "15m", START_DATE, END_DATE, margin_days=3),
-    "30m": get_dynamic_required_length(INDEX_SYMBOL, "30m", START_DATE, END_DATE, margin_days=3),
-    "60m": get_dynamic_required_length(INDEX_SYMBOL, "60m", START_DATE, END_DATE, margin_days=3),
-    "1d": get_dynamic_required_length(INDEX_SYMBOL, "1d", START_DATE, END_DATE, margin_days=3),
+    "5m": get_dynamic_required_length(INDEX_SYMBOL, "5m", START_DATE, END_DATE, margin_days=4),
+    "15m": get_dynamic_required_length(INDEX_SYMBOL, "15m", START_DATE, END_DATE, margin_days=4),
+    "30m": get_dynamic_required_length(INDEX_SYMBOL, "30m", START_DATE, END_DATE, margin_days=4),
+    "60m": get_dynamic_required_length(INDEX_SYMBOL, "60m", START_DATE, END_DATE, margin_days=4),
+    "1d": get_dynamic_required_length(INDEX_SYMBOL, "1d", START_DATE, END_DATE, margin_days=4),
 }
 
 

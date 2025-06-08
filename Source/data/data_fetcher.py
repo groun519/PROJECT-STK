@@ -19,7 +19,7 @@ def download_data_with_cache(symbol, interval, start, end):
 
     print(f"[다운로드 요청] {symbol} ({interval}) from {start} to {end}")
     try:
-        df = yf.download(symbol, interval=interval, start=start, end=end, progress=False, auto_adjust=True)
+        df = yf.download(symbol, interval=interval, start=start, end=end, progress=False, auto_adjust=True, group_by="column")
         if df.empty or len(df) < 10:
             print(f"[데이터 부족] {symbol} ({interval}) → 스킵")
             return None
@@ -64,16 +64,12 @@ def load_multitimeframe_data(symbol, index_symbol=INDEX_SYMBOL, start=START_DATE
         df_index = download_data_with_cache(index_symbol, interval, start, end)
 
         if df_symbol is not None and not df_symbol.empty:
-            df_symbol = clean_df_index(df_symbol)
-            # ✅ 지표 계산 추가
             df_symbol = compute_indicators(df_symbol)
             if df_symbol is None or df_symbol.empty:
                 print(f"[{symbol}][{interval}] 기술지표 계산 실패/결측치로 데이터 제외됨")
             else:
                 stock_data[interval] = df_symbol
         if df_index is not None and not df_index.empty:
-            df_index = clean_df_index(df_index)
-            # ✅ 지표 계산 추가
             df_index = compute_indicators(df_index)
             if df_index is None or df_index.empty:
                 print(f"[{index_symbol}][{interval}] 기술지표 계산 실패/결측치로 데이터 제외됨")
@@ -84,7 +80,14 @@ def load_multitimeframe_data(symbol, index_symbol=INDEX_SYMBOL, start=START_DATE
 
 def compute_indicators(df):
     # 컬럼명 소문자화
-    df.columns = [str(c).lower() for c in df.columns]
+    if isinstance(df.columns, pd.MultiIndex):
+        df.columns = [col[0].lower() if isinstance(col, tuple) else col.lower() for col in df.columns]
+    else:
+        df.columns = [col.lower() for col in df.columns]
+    
+    # 실수형으로 강제 변환
+    df = df.apply(pd.to_numeric, errors="coerce")
+    
     # 필수 칼럼 확인
     for col in ["open", "high", "low", "close", "volume"]:
         if col not in df.columns:
