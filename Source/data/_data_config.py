@@ -1,7 +1,7 @@
 from datetime import datetime
 
 ### 1. 심볼 설정 ###
-SYMBOL_LIST = ["MSFT"]
+SYMBOL_LIST = ["TSLA"]
 INDEX_SYMBOL = "QQQ"
 
 ### 2. 날짜 범위 ###

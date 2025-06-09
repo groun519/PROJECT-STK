@@ -12,44 +12,91 @@ from data._data_config import (
 def download_data_with_cache(symbol, interval, start, end):
     os.makedirs(DATA_PATH, exist_ok=True)
     cache_path = f"{DATA_PATH}/{symbol}_{interval}.csv"
+
     if os.path.exists(cache_path):
-        print(f"[캐시 적중] {symbol} ({interval})")
-        df = pd.read_csv(cache_path, index_col=0, header=0, parse_dates=True, date_format="%Y-%m-%d %H:%M:%S")
-        # NASDAQ 거래일 정렬 적용
+        print(f"📂 [저장된 데이터 사용] {symbol} | {interval} | {start} ~ {end}")
+        df = pd.read_csv(
+            cache_path,
+            header=0,
+            index_col=0,
+            parse_dates=True,
+            date_format="%Y-%m-%d %H:%M:%S"
+        )
         df = align_to_nasdaq_trading_days(df, start, end)
         return df
 
-    print(f"[다운로드 요청] {symbol} ({interval}) from {start} to {end}")
+    print(f"⬇️ [데이터 다운로드] {symbol} | {interval} | {start} ~ {end}")
     try:
         df = yf.download(symbol, interval=interval, start=start, end=end, progress=False, auto_adjust=True)
-        if df.empty or len(df) < 10:
-            print(f"[데이터 부족] {symbol} ({interval}) → 스킵")
-            return None
-        # NASDAQ 거래일 정렬 적용
-        df = align_to_nasdaq_trading_days(df, start, end)
+        df = df.reset_index()
+        # 멀티인덱스 대응: tuple → str
+        datetime_col = None
+        for col in df.columns:
+            col_name = col[0] if isinstance(col, tuple) else col
+            if "date" in str(col_name).lower():
+                datetime_col = col
+                break
+        if datetime_col is not None:
+            df = df.set_index(datetime_col)
+        else:
+            raise ValueError(f"{symbol} 다운로드: 날짜 컬럼을 찾을 수 없음")
+
+        df.index.name = None
+        df.columns.name = None
+
         df.to_csv(cache_path, date_format="%Y-%m-%d %H:%M:%S")
+
+        if df.empty or len(df) < 10:
+            print(f"⚠️ [데이터 부족] {symbol} | {interval} | 다운로드된 행 개수: {len(df)}")
+            return None
+
+        df = align_to_nasdaq_trading_days(df, start, end, interval)
+        df.to_csv(cache_path, date_format="%Y-%m-%d %H:%M:%S")
+        print(f"💾 [데이터 저장 완료] {symbol} | {interval} | 파일: {cache_path}")
         return df
 
     except Exception as e:
-        print(f"[다운로드 오류] {symbol} ({interval}) → {e}")
+        print(f"❌ [다운로드 오류] {symbol} | {interval} | {e}")
         return None
 
-def align_to_nasdaq_trading_days(df, start_date, end_date):
+def align_to_nasdaq_trading_days(df, start_date, end_date, freq="1d"):
     """
-    NASDAQ 영업일 기준으로 DataFrame 인덱스를 정렬하고 결측치는 ffill로 보정.
-    - start_date, end_date: 반드시 문자열('YYYY-MM-DD') 형태로 전달 (config 등에서 받아서 사용)
+    freq 예시:
+        - "1d"  → 일봉
+        - "5min"→ 5분봉
+        - "15min"→ 15분봉
+        - "1h"  → 1시간봉
     """
+    if freq == "5m" : freq = "5min"
+    elif freq == "15m" : freq = "15min"
+    elif freq == "30m" : freq = "30min"
+    elif freq == "60m" : freq = "1h"
+    
+    import pandas_market_calendars as mcal
+    import pandas as pd
+
     if not isinstance(df.index, pd.DatetimeIndex):
         df.index = pd.to_datetime(df.index)
 
-    # NASDAQ 캘린더에서 해당 기간 영업일 추출
     cal = mcal.get_calendar('NASDAQ')
     schedule = cal.schedule(start_date=start_date, end_date=end_date)
-    trading_days = schedule.index
+    market_opens = schedule['market_open']
+    market_closes = schedule['market_close']
 
-    # 영업일 기준으로 리인덱싱 및 결측 ffill
-    df = df.reindex(trading_days).ffill()
+    # 일봉일 경우
+    if freq in ["1d", "D"]:
+        trading_index = schedule.index
+    else:
+        # 분봉: 모든 거래일에 대해 실제 거래 시간 내 인덱스 생성
+        trading_index = []
+        for open_time, close_time in zip(market_opens, market_closes):
+            # 예: 5분봉이라면 freq="5min"
+            rng = pd.date_range(start=open_time, end=close_time, freq=freq)
+            trading_index.extend(rng)
+        trading_index = pd.DatetimeIndex(trading_index)
 
+    # 기준 인덱스로 정렬, 결측은 ffill
+    df = df.reindex(trading_index).ffill()
     return df
 
 # def clean_df_index(df):

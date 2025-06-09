@@ -1,4 +1,5 @@
 import numpy as np
+import pandas as pd
 
 def label_trend(df):
     """주가 변화율을 실수로 반환 (종가 기준)"""
@@ -17,10 +18,18 @@ def label_regression(df, n=1):
 def label_candle_regression(df, n=1):
     """N시점 뒤의 open/high/low/close"""
     if len(df) <= n:
-        o, h, l, c = df.iloc[-1][["open","high","low","close"]]
+        o, h, l, c = df.iloc[-1].loc[["open","high","low","close"]]
     else:
-        o, h, l, c = df.iloc[n][["open","high","low","close"]]
+        o, h, l, c = df.iloc[n].loc[["open","high","low","close"]]
     return np.array([o, h, l, c])
+
+def label_highest(df, n=1):
+    """
+    n개 구간 내 high의 최대값 반환
+    """
+    if len(df) < n + 1:
+        return np.max(df["high"].values)
+    return np.max(df["high"].values[:n+1])
 
 def label_position(df, threshold=0.01):
     """
@@ -37,11 +46,11 @@ def label_position(df, threshold=0.01):
     return np.array([np.clip(change, -1.0, 1.0)])
 
 
-def get_all_labels(df, n=1, threshold=0.01):
+def get_all_labels(df, threshold=0.01, n=100):
     return {
         "trend": label_trend(df)[0],
         "regression": label_regression(df, n=n)[0],
         "candle": label_candle_regression(df, n=n),
-        "highest": np.max(df["high"].values),
+        "highest": label_highest(df, n=n),
         "position": label_position(df, threshold=threshold)[0],
     }

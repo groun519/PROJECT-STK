@@ -64,8 +64,6 @@ def build_lstm_dataset(symbol):
         # if not valid or len(stack) != len(INTERVAL_MINUTES) * 2:
         #     continue
         
-        for idx, arr in enumerate(stack):
-            print(f"stack[{idx}] shape: {arr.shape}")
         x = np.concatenate(stack, axis=1)
         
         if ref_shape is None:
