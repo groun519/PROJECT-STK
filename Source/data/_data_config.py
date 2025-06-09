@@ -19,21 +19,8 @@ INTERVAL_MINUTES = {
     # "1d": 1440,
 }
 
-# 🔧 3-1. 날짜 기반 윈도우 수 자동 계산
-def get_dynamic_required_length(index_symbol, interval, start, end, margin_days=5):
-    import yfinance as yf
-    df = yf.download(index_symbol, start=start, end=end, interval=interval, progress=False)
-    n_rows = len(df)
-    if interval == "1d":
-        margin = margin_days
-    else:
-        minutes = int(interval.replace("m", ""))
-        margin = margin_days * (390 // minutes)
-    winlen = max(30, n_rows - margin)
-    return winlen
-
 REQUIRED_LENGTH = {
-    "5m": get_dynamic_required_length(INDEX_SYMBOL, "5m", START_DATE, END_DATE, margin_days=4),
+    "5m": 60,
     # "15m": get_dynamic_required_length(INDEX_SYMBOL, "15m", START_DATE, END_DATE, margin_days=4),
     # "30m": get_dynamic_required_length(INDEX_SYMBOL, "30m", START_DATE, END_DATE, margin_days=4),
     # "60m": get_dynamic_required_length(INDEX_SYMBOL, "60m", START_DATE, END_DATE, margin_days=4),

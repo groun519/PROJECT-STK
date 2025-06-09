@@ -1,6 +1,8 @@
+import torch
+
 EPOCHS = 30
 BATCH_SIZE = 128
-DEVICE = "cuda"
+DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 MODEL_SAVE_PATH = "./saved_models/"
 LEARNING_RATE = 1e-3
 
