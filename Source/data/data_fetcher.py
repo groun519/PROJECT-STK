@@ -5,7 +5,7 @@ import yfinance as yf
 import pandas_market_calendars as mcal
 
 from data._data_config import (
-    DATA_PATH, INTERVALS, START_DATE, END_DATE, INDEX_SYMBOL, TECHNICAL_INDICATORS, TECHNICAL_PARAMS
+    DATA_PATH, INTERVALS, START_DATE, END_DATE, INDEX_SYMBOL
 )
 
 def download_data_with_cache(symbol, interval, start, end):

@@ -13,11 +13,11 @@ TARGET_COLUMN = "close"
 INTERVALS = ["5m", "15m", "30m", "60m", "1d"]
 
 REQUIRED_LENGTH = {
-    "5m": 10,
-    "15m": 10,
-    "30m": 10,
-    "60m": 10,
-    "1d": 10,
+    "5m": 128,
+    "15m": 64,
+    "30m": 32,
+    "60m": 16,
+    "1d": 8,
 }
 
 ### 4. 라벨링 설정 ###
@@ -30,7 +30,7 @@ LABEL_THRESHOLDS = {
 }
 
 ### 5. 기술 지표 목록 (현재 사용 중: 4개) ###
-TECHNICAL_INDICATORS = [  
+#TECHNICAL_INDICATORS = [  
     # "rsi", "macd",
     # "boll_upper", "boll_lower",
     # "volume_change",
@@ -39,10 +39,10 @@ TECHNICAL_INDICATORS = [
     # "ema12", "ema26",
     # "stoch_k", "stoch_d",
     # "cci", "adx", "stoch_rsi"
-]
+#]
 
 ### 6. 기술 지표 파라미터 ###
-TECHNICAL_PARAMS = {
+#TECHNICAL_PARAMS = {
     # "rsi": {"window": 14},
     
     # "macd": {"fast": 12, "slow": 26, "signal": 9},
@@ -56,7 +56,7 @@ TECHNICAL_PARAMS = {
     # "cci": {"window": 20},
     # "adx": {"window": 14},
     # "stoch_rsi": {"window": 14}
-}
+#}
 
 ### 7. 저장 경로 ###
 DATA_PATH = "./cache/"
