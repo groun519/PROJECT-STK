@@ -2,10 +2,12 @@ import os
 import torch
 import numpy as np
 from torch.utils.data import DataLoader, TensorDataset
-from data.dataset_builder import build_generic_dataset
-from model_transformer import MultiHeadTransformer
-from _model_config import EPOCHS, BATCH_SIZE, DEVICE, MODEL_SAVE_PATH, LABEL_KEYS
+
 from data._data_config import INTERVALS
+from data.dataset_builder import build_generic_dataset
+
+from model_base.model_transformer import MultiHeadTransformer
+from model_base._model_config import EPOCHS, BATCH_SIZE, DEVICE, MODEL_SAVE_PATH, LABEL_KEYS
 
 def to_tensor(arr, dtype=torch.float):
     if arr is None:

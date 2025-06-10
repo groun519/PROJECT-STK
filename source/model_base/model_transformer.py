@@ -62,6 +62,8 @@ class MultiHeadTransformer(nn.Module):
             pred = outputs[key]
             target = y_dict[key]
             if key in ["direction", "position"]:
+                if isinstance(target, torch.Tensor) and target.dim() > 1:
+                    target = target.view(-1)
                 # CrossEntropyLoss expects (batch, num_classes), target (batch,)
                 loss = loss_fns[key](pred, target.long())
             else:

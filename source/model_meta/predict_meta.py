@@ -1,15 +1,21 @@
-# Source/meta/predict_meta.py
+# ───────── import packages ──────────
+import sys, os
+sys.path.append(os.path.dirname(os.path.abspath(os.path.dirname(__file__))))
 import torch, numpy as np, pandas as pd, sys
 from datetime import datetime
+# ───────── data ──────────
 from data._data_config import INTERVALS
 from data.data_fetcher import load_multitimeframe_data
-from model_transformer import MultiHeadTransformer
+# ───────── base ──────────
+from model_base.model_transformer import MultiHeadTransformer
+# ───────── meta ──────────
 from model_meta.train_meta_model import MetaNet          # 같은 클래스 재사용
-
 from model_meta._meta_model_config import SYMBOL, TARGET_INTERVAL, DEVICE
+# ─────────
 
 # ---- 베이스 모델 로드 ----
-from _model_config import MODEL_SAVE_PATH
+from model_base._model_config import MODEL_SAVE_PATH
+
 models={}
 for tf in INTERVALS:
     sd=torch.load(f"{MODEL_SAVE_PATH}/{tf}_model.pt",map_location=DEVICE)

@@ -1,11 +1,13 @@
-# Source/meta/train_meta_model.py
+# ───────── import packages ──────────
+import sys, os
+sys.path.append(os.path.dirname(os.path.abspath(os.path.dirname(__file__))))
 import numpy as np, torch
 from torch import nn
 from torch.utils.data import TensorDataset, DataLoader, random_split
-
+# ───────── meta ──────────
 from model_meta._meta_model_config import SYMBOL, BATCH, EPOCHS, LR, DEVICE, TARGET_INTERVAL
+# ─────────
 
-# ----------------------------
 data = np.load(f"meta/meta_dataset_{SYMBOL}_{TARGET_INTERVAL}.npz")
 X, y  = torch.tensor(data["X"]), torch.tensor(data["y"])
 

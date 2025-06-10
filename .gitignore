@@ -2,3 +2,6 @@
 /cache
 /Source/__pycache__
 /Source/data/__pycache__
+/models
+/meta
+/cache
