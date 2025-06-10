@@ -123,13 +123,13 @@ def align_to_nasdaq_trading_days(df, start_date, end_date, freq="1d"):
 #     df = df.sort_index()
 #     return df
 
-def load_multitimeframe_data(symbol, index_symbol=INDEX_SYMBOL, start=START_DATE, end=END_DATE):
+def load_multitimeframe_data(symbol, index_symbol=INDEX_SYMBOL, start=START_DATE, end=END_DATE, disable_log=False):
     stock_data = {}
     index_data = {}
 
     for interval in INTERVALS:
-        df_symbol = download_data_with_cache(symbol, interval, start, end)
-        df_index = download_data_with_cache(index_symbol, interval, start, end)
+        df_symbol = download_data_with_cache(symbol, interval, start, end, disable_log=disable_log)
+        df_index = download_data_with_cache(index_symbol, interval, start, end, disable_log=disable_log)
 
         if df_symbol is not None and not df_symbol.empty:
             df_symbol = compute_indicators(df_symbol)
