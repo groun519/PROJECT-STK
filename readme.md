@@ -1,136 +1,152 @@
-# 📈 PROJECT-STK: 주식 예측 멀티모델 시스템
+# PROJECT-STK
 
-**PROJECT-STK**는 시계열 데이터를 기반으로 다양한 머신러닝 모델을 활용해  
-주가의 방향성, 캔들 형태, 그리고 최종 포지션까지 예측하는 통합 트레이딩 모델링 프로젝트입니다.
+PROJECT-STK는 시계열 기반 주가 예측 모델을 다중 분봉 구조로 학습하고,  
+예측 결과를 종합하여 실제 매매 판단에 활용할 수 있는 트레이딩 AI 시스템입니다.
 
-> 여러 분봉(2m, 5m, 15m, 30m, 1h, 1d)의 데이터를 기반으로  
-> 개별 모델 → 앙상블 → 메타모델 → 포지션 추천까지  
-> "진짜 쓸 수 있는" 다단계 예측 시스템을 구축했습니다.
+본 프로젝트는 다음과 같은 단계를 포함합니다:
+
+- 분봉별 개별 예측 모델 학습 (LSTM/Transformer 기반)
+- 예측 결과 앙상블 (soft voting 방식)
+- 예측 성능 기반 메타모델 보정
+- OHLC 회귀 예측 및 포지션 추천
+- Streamlit 기반 대시보드 제공
 
 ---
 
-## 🚀 시작하기
-
-### 1. 의존성 설치
+## 설치
 
 ```bash
 pip install -r requirements.txt
 ```
 
-(※ `torch`, `yfinance`, `scikit-learn`, `streamlit` 등 포함)
-
 ---
 
-### 2. 데이터 다운로드
+## 사용법
+
+### 1. 데이터 수집
 
 ```bash
 python source/find_symbols.py
 ```
 
-- `nasdaqlisted.txt` 기반 주요 종목(예: TSLA, AAPL 등)의 데이터를 다운로드합니다.
-- 결과는 `cache/` 폴더에 저장됩니다.
+- `nasdaqlisted.txt`에 명시된 종목에 대해 야후파이낸스 데이터를 수집합니다.
+- 결과는 `cache/` 디렉토리에 저장됩니다.
 
----
+### 2. 모델 학습
 
-### 3. 분봉별 모델 학습
+#### 분봉별 예측 모델 학습
 
 ```bash
 python source/model_base/train_ensemble_model.py
 ```
 
-- 각 타임프레임(예: 15분봉, 1시간봉)에 대해 Transformer 기반 예측 모델을 학습합니다.
-- 예측 대상은 **상승 / 하락 / 관망 (3분류)** 입니다.
+- 각 분봉(2m, 5m, 15m, 30m, 60m, 1d)에 대해 독립적인 예측 모델을 학습합니다.
 
----
-
-### 4. 앙상블 예측 실행
-
-```bash
-python source/-/predict_ensemble.py
-```
-
-- 위에서 학습한 분봉별 모델을 **통합(soft voting)** 하여 최종 방향을 예측합니다.
-
----
-
-### 5. 메타모델 학습 (선택)
+#### 메타모델 학습
 
 ```bash
 python source/model_meta/make_meta_dataset.py
 python source/model_meta/train_meta_model.py
 ```
 
-- 이전 예측 결과 + 기술 지표를 바탕으로 보정하는 **2차 메타모델**을 학습합니다.
+- 개별 모델의 예측 결과를 입력으로 하여 성능을 보정하는 메타모델을 학습합니다.
+
+#### 캔들 회귀 예측 모델 학습 (선택)
+
+```bash
+python source/-/train_candle_model.py
+```
+
+- 다음 시점의 시가(Open), 고가(High), 저가(Low), 종가(Close)를 회귀 방식으로 예측합니다.
 
 ---
 
-### 6. 캔들 회귀 예측 (OHLC)
+### 3. 예측
+
+#### 방향성 앙상블 예측
+
+```bash
+python source/-/predict_ensemble.py
+```
+
+- 분봉별 모델의 예측을 종합하여 최종 방향성을 예측합니다.
+
+#### 메타모델 예측
+
+```bash
+python source/model_meta/predict_meta.py
+```
+
+- 메타모델을 통해 보정된 예측 결과를 생성합니다.
+
+#### 캔들 예측
 
 ```bash
 python source/-/predict_candle.py
 ```
 
-- 다음 시점의 캔들(시가, 고가, 저가, 종가)을 수치로 예측합니다.
+- OHLC 형태의 회귀 결과를 출력합니다.
 
----
-
-### 7. 포지션 추천
+#### 포지션 추천
 
 ```bash
 python source/-/recommend_position.py
 ```
 
-- 최종 예측 결과를 바탕으로  
-  **Market / Long / Short / Wait** 중 하나의 트레이딩 포지션을 추천합니다.
+- 예측 결과와 기술지표를 조합하여 포지션(Market, Long, Short, Wait 등)을 결정합니다.
 
 ---
 
-## 📊 시각화 대시보드
+### 4. 시각화
 
 ```bash
 streamlit run source/-/streamlit_app.py
 ```
 
-- 실시간 예측 결과, 수익률, 포지션 추이 등을 웹 UI로 확인할 수 있습니다.
+- 예측 결과와 수익률, 캔들 패턴 등을 웹 기반으로 시각화합니다.
 
 ---
 
-## 🧠 모델 구성 요약
+## 구성 개요
 
-이 시스템은 3단계로 예측을 수행합니다:
+- `source/model_base/`: 개별 분봉 예측 모델 (Transformer 등)
+- `source/model_meta/`: 메타모델 학습 및 예측
+- `source/data/`: 데이터 수집 및 전처리, 기술지표 계산
+- `source/-/`: 실행 진입점 스크립트
+- `cache/`: 수집된 분봉별 CSV 데이터
+- `meta/`: 메타모델용 데이터셋 저장소
+- `streamlit_app.py`: 대시보드 실행 엔트리
+
+---
+
+## 모델 구조 요약
 
 ```
-1. 분봉별 모델 (LSTM, Transformer 등) → 예측
-2. 앙상블 (soft voting) → 통합 방향 예측
-3. 메타모델 (MLP 등) → 과거 성과 기반 보정
-4. 포지션 추천기 → 실제 트레이딩 판단 지원
+[개별 분봉 모델] → [앙상블] → [메타모델] → [포지션 추천]
+                               ↘ [캔들 회귀 예측]
 ```
 
-기술지표(RSI, MACD 등)는 각 단계에서 활용됩니다.
+---
+
+## 주요 기술
+
+- Python 3.11
+- PyTorch
+- Scikit-learn
+- yfinance
+- Streamlit
 
 ---
 
-## 🔮 앞으로 할 일
+## 개발 계획
 
-- [ ] 강화학습 기반 전략(PPO 등)과 통합
-- [ ] 실시간 매매 시뮬레이터 구현
-- [ ] 종목 추천 시스템 확장
-- [ ] 리스크 기반 포트폴리오 관리
-
----
-
-## 📝 참고
-
-- 종목 목록: `nasdaqlisted.txt`
-- 데이터 캐시: `cache/`
-- 메타 데이터셋: `meta/`
-- 전체 설정: `source/-/config.py` 등
+- 강화학습(PPO 등) 기반 포지션 제어 통합
+- 실시간 시뮬레이터 및 백테스트 도입
+- 리스크 기반 수익률 평가 지표 추가
+- 멀티 심볼 최적화 모델 확장
 
 ---
 
-## 💡 만든 이유
+## 라이선스
 
-- “진짜 실전에 쓸 수 있는 주식 예측 시스템이 가능한가?”  
-- “단순 분류보다, 예측 결과를 실제 트레이딩 판단에 연결할 수 있을까?”
-
-이 두 가지 질문에 답하기 위해 시작된 프로젝트입니다.
+MIT License
