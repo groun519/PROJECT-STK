@@ -13,30 +13,32 @@ items_per_line = 10
 # 1. 나스닥 전체 심볼 가져오기
 nasdaq_url = "ftp://ftp.nasdaqtrader.com/SymbolDirectory/nasdaqlisted.txt"
 urllib.request.urlretrieve(nasdaq_url, "nasdaqlisted.txt")
-
-nasdaq_df = pd.read_csv("nasdaqlisted.txt", sep="|")[:-1]  # 마지막 합계 행 제거
+nasdaq_df = pd.read_csv("nasdaqlisted.txt", sep="|")[:-1]
 symbols = [str(sym).strip() for sym in nasdaq_df['Symbol'] if pd.notna(sym)]
-
 print(f"총 나스닥 심볼 수: {len(symbols)}")
 
 # ----------------------------------------
-# 2. yfinance로 6개월 데이터 다운로드 (100개씩 나누기)
-print("데이터 다운로드 중... (시간 소요)")
+# 2. yfinance로 6개월 데이터 다운로드
 def chunks(lst, size):
     for i in range(0, len(lst), size):
         yield lst[i:i + size]
 
+print("데이터 다운로드 중... (시간 소요)")
 all_data = {}
-for group in chunks(symbols, 100):
+total = len(symbols)
+chunk_size = 50  # 100도 괜찮지만 50이 안정적
+for i, group in enumerate(chunks(symbols, chunk_size)):
+    print(f"  ▸ 그룹 {i+1}: {group[0]} ~ {group[-1]} ({i*chunk_size+1} ~ {min((i+1)*chunk_size, total)})")
     try:
         data = yf.download(
             tickers=group,
             period='6mo',
             interval='1d',
             group_by='ticker',
-            threads=True,
             auto_adjust=True,
-            progress=False
+            threads=False,
+            progress=False,
+            timeout=20  # 강제 제한 시간 설정
         )
         if isinstance(data.columns, pd.MultiIndex):
             for sym in group:
@@ -46,20 +48,19 @@ for group in chunks(symbols, 100):
             sym = group[0]
             all_data[sym] = data.dropna()
     except Exception as e:
-        print(f"오류 발생 (건너뜀): {e}")
-    time.sleep(1)  # rate limit 방지용 대기
+        print(f"    ⚠ 오류: {e}")
+    time.sleep(2)  # Rate limit 회피
 
-print(f"수집된 종목 수: {len(all_data)}")
+print(f"\n총 수집된 종목 수: {len(all_data)}")
 
 # ----------------------------------------
-# 3. 기술적 조건 필터링 (신뢰도 기준)
+# 3. 기술적 조건 필터링
 filtered_symbols = []
 print("기술 지표 필터링 중...")
 for sym, df in all_data.items():
     try:
         if df.shape[0] < 50:
             continue
-
         df['ma50'] = df['Close'].rolling(window=50).mean()
         df['rsi'] = ta.momentum.RSIIndicator(close=df['Close']).rsi()
 
