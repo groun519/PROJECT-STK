@@ -1,69 +1,75 @@
 # ───────── import packages ──────────
 import sys, os
 sys.path.append(os.path.dirname(os.path.abspath(os.path.dirname(__file__))))
-import numpy as np, torch
+import joblib, numpy as np, torch
 from torch import nn
-from torch.utils.data import TensorDataset, DataLoader, random_split
+from torch.utils.data import TensorDataset, DataLoader
+from sklearn.model_selection import train_test_split
 # ───────── meta ──────────
 from model_meta._meta_model_config import SYMBOL, BATCH, EPOCHS, LR, DEVICE, TARGET_INTERVAL
 # ─────────
 
-data = np.load(f"meta/meta_dataset_{SYMBOL}_{TARGET_INTERVAL}.npz")
-X, y  = torch.tensor(data["X"]), torch.tensor(data["y"])
+data   = np.load(f"meta/meta_dataset_{SYMBOL}_{TARGET_INTERVAL}.npz")
+X, y   = torch.tensor(data["X"]), torch.tensor(data["y"])
 
-# y 분리: 분류(3)+분류(3)+분류(3) → trend/position/highest (원-핫), 회귀 1, OHLC-4
-trend_t      = y[:,0].long()
-position_t   = y[:,1].long()
-highest_t    = y[:,2].long()
-reg_t        = y[:,3:4].float()
-candle_t     = y[:,4:8].float()
+# ── 라벨 분리 ───────────────────────────────
+trend_t   = y[:, 0:1].to(DEVICE)
+reg_t     = y[:, 1:2].to(DEVICE)
+candle_t  = y[:, 2:6].to(DEVICE)         # 4
+highest_t = y[:, 6:7].to(DEVICE)
+pos_cls_t = y[:, 7].long().to(DEVICE)    # 0-10
+pos_off_t = y[:, 8:9].to(DEVICE)
 
-dataset = TensorDataset(X, trend_t, position_t, highest_t, reg_t, candle_t)
-train_len = int(len(dataset)*0.8)
-train_ds, val_ds = random_split(dataset, [train_len, len(dataset)-train_len])
-train_loader = DataLoader(train_ds, BATCH, shuffle=True)
-val_loader   = DataLoader(val_ds,   BATCH)
+dataset = TensorDataset(X, trend_t, reg_t, candle_t, highest_t, pos_cls_t, pos_off_t)
+train_ds, val_ds = train_test_split(dataset, test_size=0.2, shuffle=False)
+train_loader = DataLoader(train_ds, 32, shuffle=True)
+val_loader   = DataLoader(val_ds,   32)
 
+# ── 네트워크 ───────────────────────────────
 class MetaNet(nn.Module):
     def __init__(self, in_dim):
         super().__init__()
         self.shared = nn.Sequential(nn.Linear(in_dim,64),nn.ReLU(), nn.Linear(64,32),nn.ReLU())
-        self.head_trend    = nn.Linear(32,3)
-        self.head_position = nn.Linear(32,3)
-        self.head_highest  = nn.Linear(32,3)
-        self.head_reg      = nn.Linear(32,1)
-        self.head_candle   = nn.Linear(32,4)
+        self.head_trend   = nn.Linear(32,1)
+        self.head_reg     = nn.Linear(32,1)
+        self.head_candle  = nn.Linear(32,4)
+        self.head_highest = nn.Linear(32,1)
+        self.head_pos_cls = nn.Linear(32,11)
+        self.head_pos_off = nn.Linear(32,1)
     def forward(self,x):
         h=self.shared(x)
         return {
-            "trend":    self.head_trend(h),
-            "position": self.head_position(h),
-            "highest":  self.head_highest(h),
-            "reg":      self.head_reg(h),
-            "candle":   self.head_candle(h)
+            "trend":   self.head_trend(h),
+            "reg":     self.head_reg(h),
+            "candle":  self.head_candle(h),
+            "highest": self.head_highest(h),
+            "pos_cls": self.head_pos_cls(h),
+            "pos_off": self.head_pos_off(h)
         }
 
 net = MetaNet(X.shape[1]).to(DEVICE)
-opt = torch.optim.Adam(net.parameters(), lr=LR)
-ce  = nn.CrossEntropyLoss(); mse = nn.MSELoss()
+opt = torch.optim.Adam(net.parameters(), 1e-3)
+ce , mse, sl1 = nn.CrossEntropyLoss(), nn.MSELoss(), nn.SmoothL1Loss()
 
-def step(loader, train=True):
+def epoch(loader, train=True):
     net.train(train)
-    tot=0; acc=0
-    for xb,t,p,h,r,c in loader:
-        xb,t,p,h,r,c=[a.to(DEVICE) for a in (xb,t,p,h,r,c)]
+    tot, acc = 0, 0
+    for xb,t,r,c,h,pc,po in loader:
+        xb,t,r,c,h,pc,po = [a.to(DEVICE) for a in (xb,t,r,c,h,pc,po)]
         out = net(xb)
-        loss = ce(out["trend"],t)+ce(out["position"],p)+ce(out["highest"],h)\
-             + mse(out["reg"],r)+ mse(out["candle"],c)*0.5
+        loss = (mse(out["trend"], t) + mse(out["reg"], r) +
+                mse(out["candle"], c)*0.5 + mse(out["highest"], h) +
+                ce(out["pos_cls"], pc) + sl1(out["pos_off"], po)*0.5)
         if train:
             opt.zero_grad(); loss.backward(); opt.step()
-        tot += xb.size(0); acc += (out["trend"].argmax(1)==t).sum().item()
-    return acc/tot
+        tot += xb.size(0)
+        acc += (out["pos_cls"].argmax(1)==pc).sum().item()
+    return acc / tot
 
-for ep in range(EPOCHS):
-    tr  = step(train_loader, True)
-    val = step(val_loader,   False)
-    print(f"ep {ep+1:02d}  acc  train {tr:.3f}  val {val:.3f}")
+for ep in range(20):
+    tr = epoch(train_loader, True)
+    vl = epoch(val_loader, False)
+    print(f"ep{ep+1:02d} | pos-cls acc  train {tr:.3f}  val {vl:.3f}")
 
 torch.save(net.state_dict(),
            f"meta/meta_mlp_{SYMBOL}_{TARGET_INTERVAL}.pt")

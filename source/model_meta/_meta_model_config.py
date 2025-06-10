@@ -1,8 +1,10 @@
 import torch
+import numpy as np
 
 SYMBOL = "TSLA"
 TARGET_INTERVAL = "30m"
 META_DIR = "meta"; 
+BINS = np.linspace(-1.0, 1.0, 101)
 
 # ---------- train ----------
 BATCH  = 128; 
