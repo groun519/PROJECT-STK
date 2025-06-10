@@ -9,33 +9,24 @@ START_DATE = "2025-05-01"
 END_DATE = "2025-05-20"
 
 ### 3. 타임프레임 설정 ###
-TARGET_INTERVAL = "30m"
 TARGET_COLUMN = "close"
-INTERVAL_MINUTES = {
-    "5m": 5,
-    # "15m": 15,
-    # "30m": 30,
-    # "60m": 60,
-    # "1d": 1440,
-}
+INTERVALS = ["5m", "15m", "30m", "60m", "1d"]
 
 REQUIRED_LENGTH = {
-    "5m": 60,
-    # "15m": get_dynamic_required_length(INDEX_SYMBOL, "15m", START_DATE, END_DATE, margin_days=4),
-    # "30m": get_dynamic_required_length(INDEX_SYMBOL, "30m", START_DATE, END_DATE, margin_days=4),
-    # "60m": get_dynamic_required_length(INDEX_SYMBOL, "60m", START_DATE, END_DATE, margin_days=4),
-    # "1d": get_dynamic_required_length(INDEX_SYMBOL, "1d", START_DATE, END_DATE, margin_days=4),
+    "5m": 10,
+    "15m": 10,
+    "30m": 10,
+    "60m": 10,
+    "1d": 10,
 }
 
-
 ### 4. 라벨링 설정 ###
-LABELING_MODE = "binary"  # binary, three_class, position, regression
 LABEL_THRESHOLDS = {
     "5m": 0.005,
-    # "15m": 0.007,
-    # "30m": 0.01,
-    # "60m": 0.012,
-    # "1d": 0.015,
+    "15m": 0.007,
+    "30m": 0.01,
+    "60m": 0.012,
+    "1d": 0.015,
 }
 
 ### 5. 기술 지표 목록 (현재 사용 중: 4개) ###

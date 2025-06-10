@@ -3,7 +3,8 @@ import torch
 import numpy as np
 from data.dataset_builder import build_generic_dataset
 from model_transformer import MultiHeadTransformer
-from _model_config import DEVICE, MODEL_SAVE_PATH, INTERVALS, LABEL_KEYS
+from _model_config import DEVICE, MODEL_SAVE_PATH, LABEL_KEYS
+from data._data_config import INTERVALS
 
 from sklearn.metrics import accuracy_score, mean_absolute_error
 

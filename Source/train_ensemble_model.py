@@ -4,7 +4,8 @@ import numpy as np
 from torch.utils.data import DataLoader, TensorDataset
 from data.dataset_builder import build_generic_dataset
 from model_transformer import MultiHeadTransformer
-from _model_config import EPOCHS, BATCH_SIZE, DEVICE, MODEL_SAVE_PATH, INTERVALS, LABEL_KEYS
+from _model_config import EPOCHS, BATCH_SIZE, DEVICE, MODEL_SAVE_PATH, LABEL_KEYS
+from data._data_config import INTERVALS
 
 def to_tensor(arr, dtype=torch.float):
     if arr is None:

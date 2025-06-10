@@ -3,34 +3,34 @@ import pandas as pd
 from data.data_fetcher import load_multitimeframe_data
 from data.labeling_utils import get_all_labels
 from data._data_config import (
-    SYMBOL_LIST, TARGET_INTERVAL, 
-    INTERVAL_MINUTES, REQUIRED_LENGTH, LABEL_THRESHOLDS, TECHNICAL_INDICATORS
+    SYMBOL_LIST, 
+    INTERVALS, REQUIRED_LENGTH, LABEL_THRESHOLDS, TECHNICAL_INDICATORS
 )
 
 def get_threshold(interval):
     return LABEL_THRESHOLDS.get(interval, 0.01)
 
-def build_lstm_dataset(symbol):
+def build_lstm_dataset(symbol, target_interval : str):
     mtf_data = load_multitimeframe_data(symbol)
     if not mtf_data["stock"] or not mtf_data["index"]:
         print(f"❌ {symbol}: 데이터 로딩 실패 (stock or index)")
         return None, None
 
-    if TARGET_INTERVAL not in mtf_data["stock"]:
-        print(f"❌ {symbol}: {TARGET_INTERVAL} 분봉 데이터가 없습니다.")
+    if target_interval not in mtf_data["stock"]:
+        print(f"❌ {symbol}: {target_interval} 분봉 데이터가 없습니다.")
         return None, None
 
-    target_df = mtf_data["stock"][TARGET_INTERVAL]
-    threshold = get_threshold(TARGET_INTERVAL)
+    target_df = mtf_data["stock"][target_interval]
+    threshold = get_threshold(target_interval)
 
     features, labels = [], []
     ref_shape = None
 
-    for i in range(REQUIRED_LENGTH[TARGET_INTERVAL], len(target_df) - 1):
+    for i in range(REQUIRED_LENGTH[target_interval], len(target_df) - 1):
         anchor_time = target_df.index[i]
         stack, valid = [], True
 
-        for interval in INTERVAL_MINUTES.keys():
+        for interval in INTERVALS:
             win_len = REQUIRED_LENGTH[interval]
             for key in ["stock", "index"]:
                 df = mtf_data[key].get(interval)
@@ -47,6 +47,10 @@ def build_lstm_dataset(symbol):
                     break
                 
                 df.index = pd.to_datetime(df.index)
+                if df.index.tz is None:
+                    df.index = df.index.tz_localize("UTC")
+                if anchor_time.tz is None:
+                    anchor_time = anchor_time.tz_localize("UTC")
                 pos = df.index.get_indexer([anchor_time], method="nearest")[0]
                 
                 if pos == -1 or pos < win_len:
@@ -87,15 +91,13 @@ def build_lstm_dataset(symbol):
     return X, y
 
 def build_generic_dataset(interval: str):
-    global TARGET_INTERVAL
-    TARGET_INTERVAL = interval
 
     X_all, y_all = [], []
     expected_dim = None
 
     for symbol in SYMBOL_LIST:
         print(f"📡 [{symbol} / {interval}] 데이터셋 생성 중...")
-        X, y = build_lstm_dataset(symbol)
+        X, y = build_lstm_dataset(symbol, interval)
 
         if X is None or y is None:
             continue

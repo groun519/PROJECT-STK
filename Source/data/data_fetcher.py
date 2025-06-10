@@ -3,27 +3,25 @@ import numpy as np
 import pandas as pd
 import yfinance as yf
 import pandas_market_calendars as mcal
-import ta
 
 from data._data_config import (
-    DATA_PATH, INTERVAL_MINUTES, START_DATE, END_DATE, INDEX_SYMBOL, TECHNICAL_INDICATORS, TECHNICAL_PARAMS
+    DATA_PATH, INTERVALS, START_DATE, END_DATE, INDEX_SYMBOL, TECHNICAL_INDICATORS, TECHNICAL_PARAMS
 )
 
 def download_data_with_cache(symbol, interval, start, end):
     os.makedirs(DATA_PATH, exist_ok=True)
     cache_path = f"{DATA_PATH}/{symbol}_{interval}.csv"
 
-    if os.path.exists(cache_path):
-        print(f"📂 [저장된 데이터 사용] {symbol} | {interval} | {start} ~ {end}")
-        df = pd.read_csv(
-            cache_path,
-            header=0,
-            index_col=0,
-            parse_dates=True,
-            date_format="%Y-%m-%d %H:%M:%S"
-        )
-        df = align_to_nasdaq_trading_days(df, start, end)
-        return df
+    # if os.path.exists(cache_path):
+    #     print(f"📂 [저장된 데이터 사용] {symbol} | {interval} | {start} ~ {end}")
+    #     df = pd.read_csv(
+    #         cache_path,
+    #         header=0,       # 첫 번째 줄을 컬럼명으로
+    #         skiprows=[1],   # 두 번째 줄("Ticker,QQQ,...")을 건너뜀
+    #         index_col=0,    # 첫 컬럼(날짜/Price)을 인덱스로
+    #         parse_dates=True
+    #     )
+    #     return df
 
     print(f"⬇️ [데이터 다운로드] {symbol} | {interval} | {start} ~ {end}")
     try:
@@ -62,10 +60,10 @@ def download_data_with_cache(symbol, interval, start, end):
 def align_to_nasdaq_trading_days(df, start_date, end_date, freq="1d"):
     """
     freq 예시:
-        - "1d"  → 일봉
-        - "5min"→ 5분봉
-        - "15min"→ 15분봉
-        - "1h"  → 1시간봉
+        - "1d"      → 일봉
+        - "5min"    → 5분봉
+        - "15min"   → 15분봉
+        - "1h"      → 1시간봉
     """
     if freq == "5m" : freq = "5min"
     elif freq == "15m" : freq = "15min"
@@ -129,7 +127,7 @@ def load_multitimeframe_data(symbol, index_symbol=INDEX_SYMBOL, start=START_DATE
     stock_data = {}
     index_data = {}
 
-    for interval in INTERVAL_MINUTES:
+    for interval in INTERVALS:
         df_symbol = download_data_with_cache(symbol, interval, start, end)
         df_index = download_data_with_cache(index_symbol, interval, start, end)
 
