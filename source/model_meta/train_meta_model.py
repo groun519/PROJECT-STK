@@ -6,7 +6,7 @@ from torch import nn
 from torch.utils.data import TensorDataset, DataLoader
 from sklearn.model_selection import train_test_split
 # ───────── meta ──────────
-from model_meta._meta_model_config import SYMBOL, BATCH, EPOCHS, LR, DEVICE, TARGET_INTERVAL
+from model_meta._meta_model_config import SYMBOL, BATCH, EPOCHS, LR, DEVICE, TARGET_INTERVAL, BINS
 # ─────────
 
 data   = np.load(f"meta/meta_dataset_{SYMBOL}_{TARGET_INTERVAL}.npz")
@@ -22,8 +22,8 @@ pos_off_t = y[:, 8:9].to(DEVICE)
 
 dataset = TensorDataset(X, trend_t, reg_t, candle_t, highest_t, pos_cls_t, pos_off_t)
 train_ds, val_ds = train_test_split(dataset, test_size=0.2, shuffle=False)
-train_loader = DataLoader(train_ds, 32, shuffle=True)
-val_loader   = DataLoader(val_ds,   32)
+train_loader = DataLoader(train_ds, BATCH, shuffle=True)
+val_loader   = DataLoader(val_ds,   BATCH)
 
 # ── 네트워크 ───────────────────────────────
 class MetaNet(nn.Module):
@@ -34,7 +34,7 @@ class MetaNet(nn.Module):
         self.head_reg     = nn.Linear(32,1)
         self.head_candle  = nn.Linear(32,4)
         self.head_highest = nn.Linear(32,1)
-        self.head_pos_cls = nn.Linear(32,11)
+        self.head_pos_cls = nn.Linear(32,len(BINS))
         self.head_pos_off = nn.Linear(32,1)
     def forward(self,x):
         h=self.shared(x)
@@ -48,7 +48,7 @@ class MetaNet(nn.Module):
         }
 
 net = MetaNet(X.shape[1]).to(DEVICE)
-opt = torch.optim.Adam(net.parameters(), 1e-3)
+opt = torch.optim.Adam(net.parameters(), lr=LR)
 ce , mse, sl1 = nn.CrossEntropyLoss(), nn.MSELoss(), nn.SmoothL1Loss()
 
 def epoch(loader, train=True):
@@ -66,7 +66,7 @@ def epoch(loader, train=True):
         acc += (out["pos_cls"].argmax(1)==pc).sum().item()
     return acc / tot
 
-for ep in range(20):
+for ep in range(EPOCHS):
     tr = epoch(train_loader, True)
     vl = epoch(val_loader, False)
     print(f"ep{ep+1:02d} | pos-cls acc  train {tr:.3f}  val {vl:.3f}")
