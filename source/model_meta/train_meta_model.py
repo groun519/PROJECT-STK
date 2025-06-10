@@ -12,6 +12,13 @@ from model_meta._meta_model_config import SYMBOL, BATCH, EPOCHS, LR, DEVICE, TAR
 data   = np.load(f"meta/meta_dataset_{SYMBOL}_{TARGET_INTERVAL}.npz")
 X, y   = torch.tensor(data["X"]), torch.tensor(data["y"])
 
+# # ── 라벨 배열 확인 ──────────────────────────
+# print("unique pos-cls:", np.unique(data["y"][:,7]))
+# print("min/max pos-off:", data["y"][:,8].min(), data["y"][:,8].max())
+# print("rows:", len(data["y"]))
+# exit()          # ← 일단 여기서 종료 후 값만 확인
+
+
 # ── 라벨 분리 ───────────────────────────────
 trend_t   = y[:, 0:1].to(DEVICE)
 reg_t     = y[:, 1:2].to(DEVICE)
