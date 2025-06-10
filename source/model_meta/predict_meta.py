@@ -67,7 +67,7 @@ def predict(ts: pd.Timestamp):
     start = Timestamp(START_DATE).tz_localize("UTC").strftime("%Y-%m-%d")
     end   = max(Timestamp(END_DATE).tz_localize("UTC"), ts).strftime("%Y-%m-%d")
     
-    mtf   = load_multitimeframe_data(SYMBOL, start=start, end=end)
+    mtf   = load_multitimeframe_data(SYMBOL, start=start, end=end, disable_log=True)
     feats = []
     for ivl in INTERVALS:
         x = build_live_sample(mtf, ivl, ts)

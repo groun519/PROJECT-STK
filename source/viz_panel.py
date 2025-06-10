@@ -18,7 +18,7 @@ SAVE_PATH   = Path("viz")
 SAVE_PATH.mkdir(parents=True, exist_ok=True)
 
 # ── 데이터 로딩 ------------------------------------------------------------
-df_all = load_multitimeframe_data(SYMBOL, start=TRAIN_START, end=PREDICT_DATE)
+df_all = load_multitimeframe_data(SYMBOL, start=TRAIN_START, end=PREDICT_DATE, disable_log=True)
 df30 = df_all["stock"][TARGET_INTERVAL]
 if df30.index.tz is None:
     df30.index = df30.index.tz_localize("UTC")

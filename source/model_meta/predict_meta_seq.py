@@ -60,7 +60,8 @@ def forecast_100(ts_start: pd.Timestamp,
     df_30 = load_multitimeframe_data(
                 symbol,
                 start=hist_start.strftime("%Y-%m-%d"),
-                end  =ts_start.strftime("%Y-%m-%d")
+                end  =ts_start.strftime("%Y-%m-%d"),
+                disable_log=True
             )["stock"]["30m"].copy()
 
     if len(df_30) == 0:
