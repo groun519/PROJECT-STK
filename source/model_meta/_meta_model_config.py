@@ -9,8 +9,8 @@ BINS = np.array([-1.0, -0.2, 0.2, 1.0])
 
 # ---------- train ----------
 BATCH  = 128; 
-EPOCHS = 60; 
+EPOCHS = 2400; 
 LR = 1e-3
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
-PREDICT_DATE = "2025-05-20"
+PREDICT_DATE = "2025-06-01"

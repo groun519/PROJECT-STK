@@ -2,9 +2,9 @@ from datetime import datetime
 
 ### 1. 심볼 설정 ###
 SYMBOL_LIST = [
-    'NVDA', 'TSLL', 'TSLA', 'PLTR', 'RGTI', 'INTC', 'PLUG', 'TQQQ', 'SMCI', 'SOFI',
-    'AAL', 'SOUN', 'IBIT', 'AMZN', 'QQQ', 'MARA', 'AMD', 'WULF', 'WBD', 'GOOGL',
-    'GRAB', 'RIVN', 'AVGO', 'RIOT', 'LAES', 'IQ', 'QUBT', 'BITF', 'AGNC', 'CLSK',
+    'NVDA', #'TSLL', #'TSLA', 'PLTR', 'RGTI', 'INTC', 'PLUG', 'TQQQ', 'SMCI', 'SOFI',
+    # 'AAL', 'SOUN', 'IBIT', 'AMZN', 'QQQ', 'MARA', 'AMD', 'WULF', 'WBD', 'GOOGL',
+    # 'GRAB', 'RIVN', 'AVGO', 'RIOT', 'LAES', 'IQ', 'QUBT', 'BITF', 'AGNC', 'CLSK',
     # 'CMCSA', 'JBLU', 'NVDL', 'GOOG', 'RXRX', 'CRWV', 'ERIC', 'CSCO', 'HBAN', 'NVNI',
     # 'WBA', 'AMDL', 'RKLB', 'LYFT', 'MRVL', 'MSTR', 'NITO', 'QSI', 'ONCO', 'BTBT',
     # 'RR', 'CSX', 'CIFR', 'PTON', 'BLMZ', 'VTRS', 'GERN', 'RUN', 'ASST', 'TEM',
@@ -36,8 +36,8 @@ SYMBOL_LIST = [
 INDEX_SYMBOL = "^IXIC"
 
 ### 2. 날짜 범위 ###
-START_DATE = "2025-05-01"
-END_DATE = "2025-06-01"
+START_DATE = "2025-05-01T00:00:00Z"   # UTC
+END_DATE   = "2025-06-01T00:00:00Z"   # UTC
 
 ### 3. 타임프레임 설정 ###
 TARGET_COLUMN = "close"
