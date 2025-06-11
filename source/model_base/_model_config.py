@@ -1,7 +1,7 @@
 import torch
 
 EPOCHS = 60
-BATCH_SIZE = 128
+BATCH_SIZE = 256
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 MODEL_SAVE_PATH = "./models/"
 
