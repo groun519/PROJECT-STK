@@ -2,7 +2,10 @@ from datetime import datetime
 
 ### 1. 심볼 설정 ###
 SYMBOL_LIST = [
-    'NVDA', #'TSLL', #'TSLA', 'PLTR', 'RGTI', 'INTC', 'PLUG', 'TQQQ', 'SMCI', 'SOFI',
+    
+    'NVDA', 'TSLA', 'PLTR', 'RGTI', 'SMCI'
+    
+    # 'NVDA', 'TSLL', 'TSLA', 'PLTR', 'RGTI', 'INTC', 'PLUG', 'TQQQ', 'SMCI', 'SOFI',
     # 'AAL', 'SOUN', 'IBIT', 'AMZN', 'QQQ', 'MARA', 'AMD', 'WULF', 'WBD', 'GOOGL',
     # 'GRAB', 'RIVN', 'AVGO', 'RIOT', 'LAES', 'IQ', 'QUBT', 'BITF', 'AGNC', 'CLSK',
     # 'CMCSA', 'JBLU', 'NVDL', 'GOOG', 'RXRX', 'CRWV', 'ERIC', 'CSCO', 'HBAN', 'NVNI',
@@ -36,8 +39,8 @@ SYMBOL_LIST = [
 INDEX_SYMBOL = "^IXIC"
 
 ### 2. 날짜 범위 ###
-START_DATE = "2025-05-01T00:00:00Z"   # UTC
-END_DATE   = "2025-06-01T00:00:00Z"   # UTC
+START_DATE = "2025-05-01"   
+END_DATE   = "2025-06-01"   
 
 ### 3. 타임프레임 설정 ###
 TARGET_COLUMN = "close"
@@ -60,7 +63,7 @@ LABEL_THRESHOLDS = {
     "1d": 0.015,
 }
 
-### 5. 기술 지표 목록 (현재 사용 중: 4개) ###
+### 5. 기술 지표 목록 ###
 #TECHNICAL_INDICATORS = [  
     # "rsi", "macd",
     # "boll_upper", "boll_lower",

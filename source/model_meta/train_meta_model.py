@@ -9,6 +9,21 @@ from sklearn.model_selection import train_test_split
 from model_meta._meta_model_config import SYMBOL, BATCH, EPOCHS, LR, DEVICE, TARGET_INTERVAL, BINS
 # ─────────
 
+import matplotlib.pyplot as plt, matplotlib.font_manager as fm
+from pathlib import Path
+
+def set_korean_font():
+    for fp in [r"C:\Windows\Fonts\malgun.ttf",
+               r"/usr/share/fonts/truetype/nanum/NanumGothic.ttf"]:
+        if Path(fp).exists():
+            fm.fontManager.addfont(fp)
+            plt.rcParams["font.family"] = fm.FontProperties(fname=fp).get_name()
+            break
+    plt.rcParams["axes.unicode_minus"] = False
+
+set_korean_font()
+
+
 data   = np.load(f"meta/meta_dataset_{SYMBOL}_{TARGET_INTERVAL}.npz")
 X, y   = torch.tensor(data["X"]), torch.tensor(data["y"])
 

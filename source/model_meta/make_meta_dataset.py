@@ -135,6 +135,10 @@ ts_range   = target_df.index
 X_meta, y_meta = [], []
 for ts in tqdm(ts_range, desc="build meta"):
     fv        = []
+    
+    if ts.tz is None: ts = ts.tz_localize("UTC")
+    else:             ts = ts.tz_convert("UTC")
+    
     for tf in INTERVALS:                        # 베이스 예측 확률 3×5 =15
         x = build_sample(mtf, tf, ts)
         if x is None: break
